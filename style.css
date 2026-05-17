@@ -1061,10 +1061,40 @@ a { color: inherit; text-decoration: none; }
    VIEW: CONFIGURAÇÕES
    ═══════════════════════════════════════════════════════════════════ */
 .settings {
-  flex: 1; overflow-y: auto;
-  padding: 20px;
-  max-width: 880px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
 }
+.settings-nav {
+  flex-shrink: 0;
+  width: 212px;
+  border-right: 1px solid var(--border);
+  padding: 16px 10px;
+  background: var(--surface);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.settings-nav-item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%;
+  border: none; background: transparent; cursor: pointer;
+  font-size: 13px; font-weight: 600; color: var(--text-muted);
+  padding: 9px 12px; border-radius: var(--radius-md);
+  text-align: left;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+.settings-nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+.settings-nav-item:hover { background: var(--surface-2); color: var(--text); }
+.settings-nav-item.active { background: var(--accent-bg); color: var(--accent); }
+.settings-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+.settings-body > .settings-section { max-width: 860px; }
 .settings-section {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -2472,7 +2502,18 @@ a { color: inherit; text-decoration: none; }
   .toolbar { padding: 10px 14px; gap: 6px; }
   .kanban { padding: 12px; gap: 10px; }
   .column { flex: 0 0 260px; }
-  .contacts-table-wrap, .metrics, .settings, .tracking { padding: 14px; }
+  .contacts-table-wrap, .metrics, .tracking { padding: 14px; }
+  .settings { flex-direction: column; }
+  .settings-nav {
+    width: auto;
+    flex-direction: row;
+    overflow-x: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding: 8px;
+  }
+  .settings-nav-item { width: auto; white-space: nowrap; flex-shrink: 0; }
+  .settings-body { padding: 14px; }
   .modal-actions { flex-direction: column; }
   .modal-btn { width: 100%; }
   .perm-checks { grid-template-columns: 1fr; }

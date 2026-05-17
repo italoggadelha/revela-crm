@@ -498,6 +498,24 @@
     <!-- ═══════════ VIEW: CONFIGURAÇÕES ═══════════ -->
     <section class="view" data-view="settings">
       <div class="settings">
+        <aside class="settings-nav" id="settings-nav">
+          <button class="settings-nav-item active" data-section="profile">
+            <svg><use href="#i-settings"/></svg><span>Meu perfil</span>
+          </button>
+          <button class="settings-nav-item" data-section="pipeline" data-admin>
+            <svg><use href="#i-kanban"/></svg><span>Etapas do pipeline</span>
+          </button>
+          <button class="settings-nav-item" data-section="vendors" data-admin>
+            <svg><use href="#i-user-plus"/></svg><span>Vendedores</span>
+          </button>
+          <button class="settings-nav-item" data-section="whatsapp" data-admin>
+            <svg><use href="#i-wa"/></svg><span>WhatsApp / Meta</span>
+          </button>
+          <button class="settings-nav-item" data-section="google" data-admin>
+            <svg><use href="#i-calendar"/></svg><span>Google / Agenda</span>
+          </button>
+        </aside>
+        <div class="settings-body">
 
         <!-- Meu perfil (TODOS os usuários veem) -->
         <div class="settings-section" id="settings-profile">
@@ -639,10 +657,57 @@
           </div>
           <div class="wa-webhook-hint">
             <strong>URL do webhook</strong> (cole na Meta → WhatsApp → Configuration → Webhook):<br>
-            <code id="wa-webhook-url">https://fuucserezvzpiscmtokv.supabase.co/functions/v1/whatsapp-webhook</code>
+            <code id="wa-webhook-url">https://api.mylion.com.br/functions/v1/whatsapp-webhook</code>
           </div>
         </div>
 
+        <!-- Integração Google / Agenda (admin only) -->
+        <div class="settings-section" id="settings-google">
+          <div class="settings-section-head">
+            <div>
+              <div class="settings-title">Google / Agenda</div>
+              <div class="settings-desc">
+                Conecte uma conta Google para sincronizar a Agenda do CRM com o Google Calendar.
+                Crie as credenciais OAuth no Google Cloud Console (ative a Google Calendar API)
+                e cole abaixo.
+              </div>
+            </div>
+            <button class="btn-primary" id="btn-save-google">
+              <svg><use href="#i-check"/></svg> Salvar
+            </button>
+          </div>
+
+          <div class="wa-status-row" id="google-status-row">
+            <span class="wa-status-dot" id="google-status-dot"></span>
+            <span id="google-status-text">Verificando status...</span>
+          </div>
+
+          <div class="field-block" style="margin-top:14px">
+            <label class="perm-check" style="display:inline-flex;width:auto">
+              <input type="checkbox" id="google-enabled">
+              <span>Integração ativa</span>
+            </label>
+          </div>
+
+          <div class="field-block">
+            <label class="field-block-label">Client ID (OAuth — Google Cloud Console)</label>
+            <input type="text" class="input-text" id="google-client-id" placeholder="xxxxx.apps.googleusercontent.com">
+          </div>
+          <div class="field-block">
+            <label class="field-block-label">Client Secret</label>
+            <input type="password" class="input-text" id="google-client-secret" placeholder="cole o secret (fica oculto)">
+          </div>
+          <div class="wa-webhook-hint">
+            <strong>URI de redirecionamento autorizado</strong> (cadastre no Google Cloud Console):<br>
+            <code>https://crm.mylion.com.br</code>
+          </div>
+          <div class="wa-webhook-hint" style="margin-top:10px">
+            Depois de salvar as credenciais, a opção <strong>Conectar conta Google</strong> ficará
+            disponível na aba <strong>Agenda</strong> do menu.
+          </div>
+        </div>
+
+        </div><!-- /settings-body -->
       </div>
     </section>
 

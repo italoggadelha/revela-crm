@@ -44,6 +44,8 @@
     taskFilter: 'pending',
     // Playbook
     playbookTab: '',
+    // Configurações
+    settingsSection: 'profile',
     // Chat
     conversations: [],
     messages: {},                 // { conversationId: [msgs] }
@@ -1453,21 +1455,104 @@
     contentEl.scrollTop = 0;
   }
 
+  // Mapa: chave do submenu → id da seção no DOM
+  const SETTINGS_SECTIONS = {
+    profile: 'settings-profile',
+    pipeline: 'settings-pipeline',
+    vendors: 'settings-vendors',
+    whatsapp: 'settings-whatsapp',
+    google: 'settings-google'
+  };
+
+  function showSettingsSection(section) {
+    if (!SETTINGS_SECTIONS[section]) section = 'profile';
+    state.settingsSection = section;
+    $$('#settings-nav .settings-nav-item').forEach(b =>
+      b.classList.toggle('active', b.dataset.section === section));
+    Object.entries(SETTINGS_SECTIONS).forEach(([sec, id]) => {
+      const el = $(id);
+      if (el) el.style.display = (sec === section) ? '' : 'none';
+    });
+  }
+
   function renderSettings() {
     // Meu perfil é sempre renderizado (todos têm acesso ao próprio perfil)
     renderProfileSection();
 
-    // Pipeline editor, Vendedores e WhatsApp: apenas admin
-    const adminSections = ['settings-pipeline', 'settings-vendors', 'settings-whatsapp'];
-    adminSections.forEach(id => {
-      const el = $(id);
-      if (el) el.style.display = canSee('settings') ? '' : 'none';
+    const isAdminUser = canSee('settings');
+
+    // Itens admin do submenu só aparecem para admin
+    $$('#settings-nav .settings-nav-item').forEach(btn => {
+      if (btn.hasAttribute('data-admin')) btn.style.display = isAdminUser ? '' : 'none';
     });
 
-    if (canSee('settings')) {
+    // Se a seção ativa não é permitida (ex: vendedor em seção admin), volta pro perfil
+    const activeBtn = $$('#settings-nav .settings-nav-item')
+      .find(b => b.dataset.section === state.settingsSection);
+    if (!activeBtn || (activeBtn.hasAttribute('data-admin') && !isAdminUser)) {
+      state.settingsSection = 'profile';
+    }
+
+    showSettingsSection(state.settingsSection);
+
+    if (isAdminUser) {
       renderPipelineEditor();
       renderVendors();
       loadWhatsAppConfig();
+      loadGoogleConfig();
+    }
+  }
+
+  // ─── Configuração Google / Agenda ───
+  async function loadGoogleConfig() {
+    const { data, error } = await supabase
+      .from('google_config').select('*').eq('id', 1).maybeSingle();
+    if (error) { console.warn('Erro google config:', error); return; }
+    const c = data || {};
+
+    $('google-enabled').checked = !!c.enabled;
+    $('google-client-id').value = c.client_id || '';
+    $('google-client-secret').value = c.client_secret || '';
+
+    const dot = $('google-status-dot');
+    const txt = $('google-status-text');
+    const hasId = !!c.client_id;
+    const hasSecret = !!c.client_secret;
+    if (c.enabled && hasId && hasSecret) {
+      dot.className = 'wa-status-dot on';
+      txt.textContent = 'Credenciais salvas — conecte a conta Google na aba Agenda';
+    } else if (hasId || hasSecret) {
+      dot.className = 'wa-status-dot partial';
+      txt.textContent = 'Configuração incompleta — preencha Client ID e Secret e marque "Integração ativa"';
+    } else {
+      dot.className = 'wa-status-dot off';
+      txt.textContent = 'Não configurado — crie as credenciais no Google Cloud Console';
+    }
+  }
+
+  async function saveGoogleConfig() {
+    const btn = $('btn-save-google');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Salvando';
+
+    const patch = {
+      enabled: $('google-enabled').checked,
+      client_id: $('google-client-id').value.trim() || null,
+      client_secret: $('google-client-secret').value.trim() || null,
+      updated_at: new Date().toISOString(),
+      updated_by: state.user.id
+    };
+
+    const { error } = await supabase.from('google_config').update(patch).eq('id', 1);
+
+    btn.disabled = false;
+    btn.innerHTML = '<svg><use href="#i-check"/></svg> Salvar';
+
+    if (error) {
+      toast('Erro ao salvar: ' + error.message, 'error');
+    } else {
+      toast('Configuração Google salva', 'success');
+      loadGoogleConfig();
     }
   }
 
@@ -2412,6 +2497,13 @@
 
     // Save WhatsApp config
     $('btn-save-whatsapp').addEventListener('click', saveWhatsAppConfig);
+
+    // Submenu de Configurações
+    $$('#settings-nav .settings-nav-item').forEach(btn => {
+      btn.addEventListener('click', () => showSettingsSection(btn.dataset.section));
+    });
+    // Save Google config
+    $('btn-save-google').addEventListener('click', saveGoogleConfig);
 
     // Chat events
     bindChatEvents();
