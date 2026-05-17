@@ -1,0 +1,2221 @@
+// ═══════════════════════════════════════════════════════════════════
+// REVELA CRM v2 — App principal
+// ═══════════════════════════════════════════════════════════════════
+
+(function () {
+  'use strict';
+
+  // ─── Validação de config ───
+  if (!window.CRM_CONFIG ||
+      window.CRM_CONFIG.SUPABASE_URL === 'COLE_AQUI_SUPABASE_URL' ||
+      !window.CRM_CONFIG.SUPABASE_URL) {
+    document.body.innerHTML =
+      '<div style="padding:40px;color:#DC2626;font-family:monospace">' +
+      '<h2>⚠️ CRM não configurado</h2>' +
+      '<p>Edite o arquivo <strong>config.js</strong> com as credenciais do Supabase.</p>' +
+      '</div>';
+    return;
+  }
+
+  const CONFIG = window.CRM_CONFIG;
+  const supabase = window.supabase.createClient(
+    CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY,
+    { auth: { persistSession: true, autoRefreshToken: true } }
+  );
+
+  // ─── Estado global ───
+  const state = {
+    user: null,
+    profile: null,
+    profiles: [],
+    pipeline: [],
+    leads: [],
+    filtered: [],
+    currentView: 'dashboard',
+    searchTerm: '',
+    filters: { vendor: '', revenue: '', period: '' },
+    currentLead: null,
+    editingLead: null,
+    sortables: [],
+    charts: {},
+    // Chat
+    conversations: [],
+    messages: {},                 // { conversationId: [msgs] }
+    activeConversationId: null,
+    chatSearchTerm: ''
+  };
+
+  // ─── Mapa de fontes (label + ícone + cor) ───
+  const SOURCE_META = {
+    trafego_pago:        { label: 'Tráfego pago',         icon: '💰', bg: '#FEF3C7' },
+    stories:             { label: 'Stories',              icon: '📸', bg: '#FCE7F3' },
+    bio_link:            { label: 'Link da bio',          icon: '🔗', bg: '#E0E7FF' },
+    direct:              { label: 'Direct (DM)',          icon: '💬', bg: '#DCFCE7' },
+    instagram_organico:  { label: 'Instagram orgânico',   icon: '📱', bg: '#FDF2F8' },
+    facebook_organico:   { label: 'Facebook orgânico',    icon: '👥', bg: '#DBEAFE' },
+    direto:              { label: 'Acesso direto',        icon: '🌐', bg: '#F5F5F2' },
+    outro:               { label: 'Outro / sem origem',   icon: '❓', bg: '#F5F5F2' }
+  };
+
+  function sourceMeta(t) { return SOURCE_META[t] || SOURCE_META.outro; }
+
+  // ─── Calcula temperatura (60% poder de investir + 40% momento do diagnóstico) ───
+  // Lead ideal REVELA = tem dinheiro pra investir + está no estágio certo do funil
+  function calcTemperature(faturamento, notaGeral) {
+    // PODER DE INVESTIR — peso 60%
+    const fatMap = {
+      'Até R$ 5 mil/mês':         2,  // pouco budget, lead frio
+      'R$ 5 a R$ 15 mil/mês':     5,  // sweet spot inferior
+      'R$ 15 a R$ 30 mil/mês':    5,  // sweet spot superior
+      'R$ 30 a R$ 50 mil/mês':    4,  // pode investir mais que o ticket médio
+      'Acima de R$ 50 mil/mês':   3   // grande, mas pode estar saturado
+    };
+    const money = fatMap[faturamento] || 2;
+
+    // ESTÁGIO DO DIAGNÓSTICO — peso 40%
+    let stage;
+    if (notaGeral == null)        stage = 3;  // sem nota → assume médio
+    else if (notaGeral < 1.5)     stage = 3;  // PARTIDA: precisa muito mas pode ser cedo demais
+    else if (notaGeral < 2.5)     stage = 5;  // FUNDAÇÃO: target ideal — clareza da dor
+    else if (notaGeral < 3.5)     stage = 5;  // ESTRUTURAÇÃO: target ideal — busca método
+    else if (notaGeral < 4.5)     stage = 3;  // TRAÇÃO: já tem estrutura, precisa menos
+    else                          stage = 1;  // MULTIPLICAÇÃO: maduro, baixa urgência
+
+    // Combinado com pesos
+    const score = (money * 0.6) + (stage * 0.4);
+    return Math.min(5, Math.max(1, Math.round(score)));
+  }
+
+  function tempLabel(t) {
+    return ({ 1: 'Frio', 2: 'Morno', 3: 'Quente', 4: 'Muito quente', 5: 'Ideal' })[t] || '—';
+  }
+
+  function tempGauge(t) {
+    // No card: ícone de fogo animado, cor varia com a temperatura
+    if (!t) t = 1;
+    return `<span class="heat-icon" data-temp="${t}" title="Temperatura: ${tempLabel(t)} (${t}/5)">
+      <svg viewBox="0 0 24 24" fill="currentColor"><use href="#i-flame"/></svg>
+    </span>`;
+  }
+
+  function tempBadge(t) {
+    if (!t) return '';
+    return `<span class="temp-badge" data-temp="${t}"><svg style="width:9px;height:9px"><use href="#i-flame"/></svg>${tempLabel(t)}</span>`;
+  }
+
+  function tempMeter(t) {
+    if (!t) t = 1;
+    return `<div class="temp-meter" data-temp="${t}">
+      <div class="temp-meter-bar">
+        ${[1,2,3,4,5].map(i => `<span class="temp-meter-seg ${i <= t ? 'filled' : ''}"></span>`).join('')}
+      </div>
+      <div class="temp-meter-label">
+        <svg style="width:12px;height:12px"><use href="#i-flame"/></svg>
+        ${tempLabel(t)} <span style="color:var(--text-faded);font-weight:500">— ${t}/5</span>
+      </div>
+    </div>`;
+  }
+
+  function leadTemperature(lead) {
+    if (lead.temperature) return lead.temperature;
+    return calcTemperature(lead.faturamento, lead.nota_geral);
+  }
+
+  // ─── Permissões ───
+  function defaultPerms(role) {
+    if (role === 'admin') {
+      return { dashboard: true, pipeline: true, chat: true, contacts: true, tracking: true, settings: true };
+    }
+    return { dashboard: true, pipeline: true, chat: true, contacts: true, tracking: true, settings: false };
+  }
+
+  function userPerms() {
+    return state.profile?.permissions || defaultPerms(state.profile?.role || 'vendedor');
+  }
+
+  function canSee(perm) {
+    return !!userPerms()[perm];
+  }
+
+  // ─── DOM helpers ───
+  const $ = (id) => document.getElementById(id);
+  const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+
+  // ─── Utils ───
+  function igUsername(handle) { return String(handle || '').replace(/^@/, '').trim(); }
+
+  // Fallback chain: tenta unavatar.io (foto real IG), se não rola usa ui-avatars.com (colorido com inicial)
+  // ui-avatars sempre funciona — gera SVG da inicial em cor randômica baseada no nome
+  function avatarUrl(handle, nome) {
+    const u = igUsername(handle);
+    const fallbackName = encodeURIComponent(nome || handle || '?');
+    const uiFallback = `https://ui-avatars.com/api/?name=${fallbackName}&background=0F766E&color=fff&rounded=true&bold=true&size=80&font-size=0.5`;
+    if (!u) return uiFallback;
+    // unavatar.io aceita um fallback URL — se o IG não tiver foto pública, redireciona pra ui-avatars
+    return `https://unavatar.io/instagram/${u}?fallback=${encodeURIComponent(uiFallback)}`;
+  }
+  function phoneDigits(phone) { return String(phone || '').replace(/\D/g, ''); }
+  function whatsappLink(phone, fname) {
+    const d = phoneDigits(phone); if (!d) return '#';
+    const txt = fname
+      ? `Oi ${fname}, aqui é da equipe REVELA. Vi o seu diagnóstico e queria conversar.`
+      : 'Oi! Aqui é da equipe REVELA.';
+    return `https://wa.me/${d}?text=${encodeURIComponent(txt)}`;
+  }
+  function instagramLink(handle) { const u = igUsername(handle); return u ? `https://instagram.com/${u}` : '#'; }
+  function reportLink(lead) {
+    return lead.report_link || `${CONFIG.REPORT_BASE_URL}?id=${lead.id}`;
+  }
+  // Avatar de um usuário/profile: usa avatar_url (foto enviada) se houver,
+  // senão cai pro avatar gerado pela inicial
+  function profileAvatar(profile) {
+    if (profile && profile.avatar_url) return profile.avatar_url;
+    const nome = profile ? (profile.nome || profile.email) : '';
+    return avatarUrl(null, nome);
+  }
+  function firstName(nome) { return String(nome || '').trim().split(/\s+/)[0] || ''; }
+  function initials(nome) {
+    const p = String(nome || '').trim().split(/\s+/);
+    if (!p[0]) return '?';
+    if (p.length === 1) return p[0].charAt(0).toUpperCase();
+    return (p[0].charAt(0) + p[p.length - 1].charAt(0)).toUpperCase();
+  }
+  function relativeTime(d) {
+    if (!d) return '';
+    const ms = Date.now() - new Date(d).getTime();
+    const m = Math.floor(ms / 60000);
+    if (m < 1) return 'agora';
+    if (m < 60) return `${m}min`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h`;
+    const days = Math.floor(h / 24);
+    if (days < 7) return `${days}d`;
+    if (days < 30) return `${Math.floor(days / 7)}sem`;
+    return `${Math.floor(days / 30)}m`;
+  }
+  function formatDate(d) {
+    if (!d) return '—';
+    return new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+  function isAdmin() { return state.profile?.role === 'admin'; }
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  function toast(msg, type) {
+    const el = $('toast'); el.textContent = msg;
+    el.className = 'toast show' + (type ? ' ' + type : '');
+    clearTimeout(toast._t); toast._t = setTimeout(() => el.className = 'toast', 3000);
+  }
+  function topsToList(lead) { return [lead.top1, lead.top2, lead.top3].filter(Boolean); }
+  function findStage(id) {
+    return state.pipeline.find(s => s.id === id) || { id: id, label: id, color: '#94A3B8' };
+  }
+  function profileById(id) {
+    return state.profiles.find(p => p.id === id);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // AUTH
+  // ═══════════════════════════════════════════════════════════════════
+  async function tryRestoreSession() {
+    const { data } = await supabase.auth.getSession();
+    if (data.session?.user) {
+      state.user = data.session.user;
+      await loadProfile();
+      showApp();
+    } else showLogin();
+  }
+
+  async function loadProfile() {
+    const { data } = await supabase.from('profiles').select('*').eq('id', state.user.id).maybeSingle();
+    state.profile = data || { id: state.user.id, email: state.user.email, role: 'vendedor' };
+    // Merge permissões com defaults — cobre chaves novas (ex: 'chat') em profiles
+    // criados antes de uma migration que adicionou novas permissões
+    const defaults = defaultPerms(state.profile.role);
+    state.profile.permissions = { ...defaults, ...(state.profile.permissions || {}) };
+  }
+
+  async function login(email, password) {
+    $('login-error').classList.remove('show');
+    $('login-btn').disabled = true; $('login-btn').textContent = 'Entrando...';
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      state.user = data.user;
+      await loadProfile();
+      showApp();
+    } catch (err) {
+      $('login-error').textContent = err.message || 'Não foi possível entrar.';
+      $('login-error').classList.add('show');
+    } finally {
+      $('login-btn').disabled = false; $('login-btn').textContent = 'Entrar';
+    }
+  }
+
+  async function logout() {
+    await supabase.auth.signOut();
+    Object.assign(state, { user: null, profile: null, leads: [] });
+    teardownSortables();
+    closeAllModals();
+    showLogin();
+  }
+
+  function showLogin() {
+    $('login-screen').style.display = 'flex';
+    $('app').classList.remove('show');
+  }
+
+  function showApp() {
+    $('login-screen').style.display = 'none';
+    $('app').classList.add('show');
+
+    // User menu (topbar)
+    const displayName = state.profile.nome || state.profile.email.split('@')[0];
+    $('user-name').textContent = displayName;
+    $('user-email').textContent = state.profile.email;
+    $('user-role').textContent = state.profile.role;
+    if ($('user-dropdown-name')) $('user-dropdown-name').textContent = displayName;
+
+    // Avatares do usuário (topbar + dropdown)
+    const userAv = profileAvatar(state.profile);
+    ['topbar-user-avatar', 'user-dropdown-avatar'].forEach(id => {
+      const el = $(id);
+      if (el) el.innerHTML = `<img src="${userAv}" alt="" onerror="this.parentElement.textContent='${initials(displayName)}'">`;
+    });
+
+    // Aplica permissões: esconde abas que o user não pode ver
+    applyNavPermissions();
+
+    // Load tudo
+    Promise.all([loadPipeline(), loadProfiles(), loadLeads(), loadConversations()]).then(() => {
+      renderAll();
+      subscribeRealtime();
+      // Garante que a view atual é uma permitida
+      ensureValidView();
+    });
+  }
+
+  function applyNavPermissions() {
+    $$('.nav-item').forEach(btn => {
+      const perm = btn.dataset.perm;
+      if (!perm) return;
+      btn.style.display = canSee(perm) ? '' : 'none';
+    });
+  }
+
+  function ensureValidView() {
+    if (!canSee(state.currentView)) {
+      const fallback = ['dashboard', 'pipeline', 'contacts', 'tracking', 'settings']
+        .find(v => canSee(v === 'pipeline' ? 'pipeline' : v));
+      // map de view name pra permission
+      const order = ['dashboard', 'pipeline', 'contacts', 'tracking', 'settings'];
+      const perms = ['dashboard', 'pipeline', 'contacts', 'tracking', 'settings'];
+      for (let i = 0; i < order.length; i++) {
+        if (canSee(perms[i])) {
+          // converter pipeline → kanban (view ID)
+          switchView(order[i] === 'pipeline' ? 'kanban' : order[i]);
+          return;
+        }
+      }
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // DATA: pipeline_config, profiles, leads
+  // ═══════════════════════════════════════════════════════════════════
+  async function loadPipeline() {
+    const { data, error } = await supabase.from('pipeline_config').select('columns').eq('id', 1).maybeSingle();
+    if (error || !data) {
+      console.warn('Pipeline config falhou, usando default', error);
+      state.pipeline = defaultPipeline();
+    } else {
+      state.pipeline = (data.columns || []).slice().sort((a, b) => a.order - b.order);
+    }
+  }
+
+  function defaultPipeline() {
+    return [
+      { id: 'lead_criado',    label: 'Lead criado',    color: '#A5B4FC', order: 0 },
+      { id: 'agendou',        label: 'Agendou',        color: '#FDBA74', order: 1 },
+      { id: 'call_realizada', label: 'Call realizada', color: '#86EFAC', order: 2 },
+      { id: 'no_show',        label: 'No show',        color: '#D4D4D8', order: 3 },
+      { id: 'negociando',     label: 'Negociando',     color: '#FCD34D', order: 4 },
+      { id: 'vendida',        label: 'Vendida',        color: '#34D399', order: 5 },
+      { id: 'perdida',        label: 'Perdida',        color: '#FCA5A5', order: 6 }
+    ];
+  }
+
+  async function savePipeline(columns) {
+    const { error } = await supabase.from('pipeline_config')
+      .update({ columns, updated_at: new Date().toISOString(), updated_by: state.user.id })
+      .eq('id', 1);
+    if (error) { toast('Erro: ' + error.message, 'error'); return false; }
+    state.pipeline = columns;
+    toast('Pipeline salvo', 'success');
+    renderAll();
+    return true;
+  }
+
+  async function loadProfiles() {
+    const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: true });
+    if (error) { console.warn('Profiles falhou', error); return; }
+    state.profiles = data || [];
+  }
+
+  async function loadLeads() {
+    const { data, error } = await supabase.from('leads').select('*').order('created_at', { ascending: false });
+    if (error) { toast('Erro ao carregar: ' + error.message, 'error'); return; }
+    state.leads = data || [];
+  }
+
+  async function updateLead(id, patch) {
+    const lead = state.leads.find(l => l.id === id);
+    const previous = lead ? { ...lead } : null;
+    if (lead) Object.assign(lead, patch);
+    renderAll();
+
+    const { error } = await supabase.from('leads').update({ ...patch, atualizado_por: state.user.id }).eq('id', id);
+    if (error) {
+      if (lead && previous) Object.assign(lead, previous);
+      renderAll();
+      toast('Erro: ' + error.message, 'error');
+      return false;
+    }
+    return true;
+  }
+
+  async function deleteLead(id) {
+    if (!confirm('Deletar este lead permanentemente? Esta ação não pode ser desfeita.')) return;
+    const { error } = await supabase.from('leads').delete().eq('id', id);
+    if (error) { toast('Erro: ' + error.message, 'error'); return; }
+    state.leads = state.leads.filter(l => l.id !== id);
+    closeAllModals();
+    renderAll();
+    toast('Lead deletado', 'success');
+  }
+
+  // Resumo: chama Edge Function, faz cache na coluna instagram_summary
+  async function ensureSummary(lead) {
+    if (lead.instagram_summary) return lead.instagram_summary;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(CONFIG.SUPABASE_URL + CONFIG.SUMMARY_FUNCTION_PATH, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': CONFIG.SUPABASE_ANON_KEY,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ lead_id: lead.id })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const json = await res.json();
+      if (json.summary) {
+        lead.instagram_summary = json.summary;
+        return json.summary;
+      }
+      return null;
+    } catch (err) {
+      console.warn('Summary falhou:', err);
+      return null;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // REALTIME
+  // ═══════════════════════════════════════════════════════════════════
+  let realtimeChannel = null;
+  function subscribeRealtime() {
+    if (realtimeChannel) supabase.removeChannel(realtimeChannel);
+    realtimeChannel = supabase.channel('crm-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, payload => {
+        if (payload.eventType === 'INSERT') {
+          if (!state.leads.find(l => l.id === payload.new.id)) {
+            state.leads.unshift(payload.new);
+            renderAll();
+            toast(`Novo lead: ${payload.new.nome}`, 'success');
+          }
+        } else if (payload.eventType === 'UPDATE') {
+          const i = state.leads.findIndex(l => l.id === payload.new.id);
+          if (i >= 0) { state.leads[i] = payload.new; renderAll(); }
+        } else if (payload.eventType === 'DELETE') {
+          state.leads = state.leads.filter(l => l.id !== payload.old.id);
+          renderAll();
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pipeline_config' }, async () => {
+        await loadPipeline(); renderAll();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, async () => {
+        await loadProfiles();
+        if (state.currentView === 'settings') renderVendors();
+        renderAll();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, async (payload) => {
+        // Recarrega lista de conversations (mais simples que sync seletivo por causa do join com leads)
+        await loadConversations();
+        if (state.currentView === 'chat') renderChat();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, async (payload) => {
+        if (payload.eventType === 'INSERT') {
+          const m = payload.new;
+          // Adiciona ao cache da conversa
+          if (!state.messages[m.conversation_id]) state.messages[m.conversation_id] = [];
+          if (!state.messages[m.conversation_id].find(x => x.id === m.id)) {
+            state.messages[m.conversation_id].push(m);
+          }
+          // Toast pra nova mensagem inbound se não estiver na conversa
+          if (m.direction === 'in' && state.activeConversationId !== m.conversation_id) {
+            const conv = state.conversations.find(c => c.id === m.conversation_id);
+            const lead = conv?.leads || {};
+            toast(`💬 ${lead.nome || 'Lead'}: ${(m.content || '[mídia]').slice(0, 40)}`, 'success');
+          }
+          if (state.currentView === 'chat' && state.activeConversationId === m.conversation_id) {
+            renderChatThread();
+          }
+        } else if (payload.eventType === 'UPDATE') {
+          const m = payload.new;
+          const arr = state.messages[m.conversation_id];
+          if (arr) {
+            const idx = arr.findIndex(x => x.id === m.id);
+            if (idx >= 0) arr[idx] = m;
+            if (state.currentView === 'chat' && state.activeConversationId === m.conversation_id) {
+              renderChatThread();
+            }
+          }
+        }
+      })
+      .subscribe();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // VIEW ROUTING
+  // ═══════════════════════════════════════════════════════════════════
+  function switchView(name) {
+    state.currentView = name;
+    $$('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.view === name));
+    $$('.view').forEach(v => v.classList.toggle('active', v.dataset.view === name));
+
+    const titles = {
+      dashboard: 'Dashboard',
+      kanban: 'Pipeline',
+      chat: 'Chat',
+      contacts: 'Contatos',
+      tracking: 'Traqueamento',
+      settings: 'Configurações'
+    };
+    $('topbar-title').textContent = titles[name] || name;
+
+    // Toolbar de filtros aparece em kanban e contacts
+    $('toolbar').style.display = (name === 'kanban' || name === 'contacts') ? '' : 'none';
+
+    if (name === 'dashboard') renderMetrics();
+    if (name === 'contacts')  renderContacts();
+    if (name === 'tracking')  renderTracking();
+    if (name === 'settings')  renderSettings();
+    if (name === 'chat')      renderChat();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // FILTROS + BUSCA
+  // ═══════════════════════════════════════════════════════════════════
+  function applyFilters() {
+    let result = state.leads.slice();
+
+    // Busca
+    const term = state.searchTerm.toLowerCase().trim();
+    if (term) {
+      result = result.filter(l =>
+        (l.nome || '').toLowerCase().includes(term) ||
+        (l.instagram || '').toLowerCase().includes(term) ||
+        (l.telefone || '').toLowerCase().includes(term) ||
+        (l.momento || '').toLowerCase().includes(term)
+      );
+    }
+
+    // Vendedor
+    if (state.filters.vendor === 'me') {
+      result = result.filter(l => l.assigned_to === state.user.id);
+    } else if (state.filters.vendor === 'unassigned') {
+      result = result.filter(l => !l.assigned_to);
+    } else if (state.filters.vendor) {
+      result = result.filter(l => l.assigned_to === state.filters.vendor);
+    }
+
+    // Faturamento
+    if (state.filters.revenue) {
+      result = result.filter(l => l.faturamento === state.filters.revenue);
+    }
+
+    // Período
+    if (state.filters.period) {
+      const now = Date.now();
+      const periods = { today: 1, week: 7, month: 30 };
+      const days = periods[state.filters.period];
+      if (days) {
+        const cutoff = now - days * 24 * 60 * 60 * 1000;
+        result = result.filter(l => new Date(l.created_at).getTime() > cutoff);
+      }
+    }
+
+    state.filtered = result;
+  }
+
+  function updateFilterUI() {
+    // Atualiza select de vendor com profiles
+    const sel = $('filter-vendor');
+    const currentVal = sel.value;
+    sel.innerHTML = `
+      <option value="">Todos vendedores</option>
+      <option value="me">Meus leads</option>
+      <option value="unassigned">Não atribuídos</option>
+      ${state.profiles.map(p => `<option value="${p.id}">${escapeHtml(p.nome || p.email.split('@')[0])}</option>`).join('')}
+    `;
+    sel.value = currentVal;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // RENDER
+  // ═══════════════════════════════════════════════════════════════════
+  function renderAll() {
+    applyFilters();
+    updateFilterUI();
+    renderStats();
+    renderKanban();
+    if (state.currentView === 'contacts') renderContacts();
+    if (state.currentView === 'dashboard') renderMetrics();
+    if (state.currentView === 'tracking') renderTracking();
+  }
+
+  function renderStats() {
+    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const wk = state.leads.filter(l => new Date(l.created_at).getTime() > weekAgo).length;
+    const sold = state.leads.filter(l => l.pipeline_status === 'vendida').length;
+    $('stat-total').textContent = state.leads.length;
+    $('stat-week').textContent = wk;
+    $('stat-vendida').textContent = sold;
+    $('nav-badge-kanban').textContent = state.leads.length;
+    $('nav-badge-contacts').textContent = state.leads.length;
+  }
+
+  // ─── KANBAN ───
+  function renderKanban() {
+    const k = $('kanban');
+    k.innerHTML = state.pipeline.map(stage => `
+      <div class="column" style="--col-color:${stage.color}" data-status="${stage.id}">
+        <header class="column-head">
+          <span class="column-dot"></span>
+          <span class="column-title">${escapeHtml(stage.label)}</span>
+          <span class="column-count" data-count="${stage.id}">0</span>
+        </header>
+        <div class="column-body" data-status="${stage.id}"></div>
+      </div>
+    `).join('');
+
+    state.pipeline.forEach(stage => {
+      const body = k.querySelector(`.column-body[data-status="${stage.id}"]`);
+      const count = k.querySelector(`[data-count="${stage.id}"]`);
+      const leads = state.filtered.filter(l => l.pipeline_status === stage.id);
+      count.textContent = leads.length;
+      body.innerHTML = leads.length
+        ? leads.map(l => cardHTML(l, stage)).join('')
+        : '<div class="empty-col">Sem leads aqui</div>';
+    });
+
+    setupSortables();
+  }
+
+  function cardHTML(lead, stage) {
+    const handle = lead.instagram || '';
+    const fname = firstName(lead.nome);
+    const avatar = avatarUrl(handle, lead.nome);
+    const temp = leadTemperature(lead);
+    const summary = lead.instagram_summary
+      ? `<div class="card-summary">${escapeHtml(lead.instagram_summary)}</div>`
+      : `<div class="card-summary loading" data-needs-summary="${lead.id}">Gerando resumo</div>`;
+    const assignedP = lead.assigned_to ? profileById(lead.assigned_to) : null;
+    const assignedChip = assignedP
+      ? `<span class="chip chip-accent" title="Vendedor: ${escapeHtml(assignedP.nome || assignedP.email)}">👤 ${escapeHtml((assignedP.nome || assignedP.email).split(/[@\s]/)[0])}</span>`
+      : '';
+    const sm = lead.source_type ? sourceMeta(lead.source_type) : null;
+    const sourceChip = sm
+      ? `<span class="chip chip-source" data-src="${lead.source_type}" title="${escapeHtml(sm.label)}${lead.source_campaign ? ' · ' + escapeHtml(lead.source_campaign) : ''}">${sm.icon} ${escapeHtml(sm.label)}</span>`
+      : '';
+
+    return `
+      <div class="card" data-lead-id="${lead.id}">
+        <div class="card-head">
+          <div class="card-avatar">
+            ${avatar
+              ? `<img src="${avatar}" alt="" onerror="this.parentElement.textContent='${initials(lead.nome)}';">`
+              : initials(lead.nome)}
+          </div>
+          <div class="card-identity">
+            <div class="card-name">${escapeHtml(lead.nome)}</div>
+            <div class="card-handle">${escapeHtml(handle)}</div>
+          </div>
+          ${tempGauge(temp)}
+        </div>
+        <div class="card-meta">
+          ${lead.momento ? `<span class="chip">${escapeHtml(lead.momento)}</span>` : ''}
+          ${lead.nota_geral != null ? `<span class="chip chip-score">${Number(lead.nota_geral).toFixed(1).replace('.', ',')}/5</span>` : ''}
+          ${sourceChip}
+          ${assignedChip}
+        </div>
+        ${summary}
+        <div class="card-footer">
+          <a class="card-btn wa" href="${whatsappLink(lead.telefone, fname)}" target="_blank" onclick="event.stopPropagation()" title="WhatsApp">
+            <svg><use href="#i-wa"/></svg>
+          </a>
+          <a class="card-btn ig" href="${instagramLink(handle)}" target="_blank" onclick="event.stopPropagation()" title="Instagram">
+            <svg><use href="#i-ig"/></svg>
+          </a>
+          <a class="card-btn report" href="${reportLink(lead)}" target="_blank" onclick="event.stopPropagation()" title="Relatório">
+            <svg><use href="#i-report"/></svg>
+          </a>
+          <span class="card-time">${relativeTime(lead.created_at)}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  function teardownSortables() {
+    state.sortables.forEach(s => { try { s.destroy(); } catch(e){} });
+    state.sortables = [];
+  }
+
+  function setupSortables() {
+    teardownSortables();
+    $$('.column-body').forEach(col => {
+      const s = new Sortable(col, {
+        group: 'pipeline',
+        animation: 180,
+        ghostClass: 'sortable-ghost',
+        chosenClass: 'sortable-chosen',
+        dragClass: 'sortable-drag',
+        onEnd: async (evt) => {
+          const id = evt.item.dataset.leadId;
+          const ns = evt.to.dataset.status;
+          const os = evt.from.dataset.status;
+          if (ns !== os) await updateLead(id, { pipeline_status: ns });
+        }
+      });
+      state.sortables.push(s);
+    });
+
+    // Click no card abre modal
+    $$('.card').forEach(c => {
+      c.addEventListener('click', e => {
+        if (e.target.closest('a') || e.target.closest('button')) return;
+        openLeadModal(c.dataset.leadId);
+      });
+    });
+
+    // Lazy load summaries
+    $$('[data-needs-summary]').forEach(el => {
+      const id = el.dataset.needsSummary;
+      const lead = state.leads.find(l => l.id === id);
+      if (!lead) return;
+      ensureSummary(lead).then(summary => {
+        if (summary && state.currentView === 'kanban') {
+          renderKanban();
+        }
+      });
+    });
+  }
+
+  // ─── CONTATOS ───
+  function renderContacts() {
+    const tbody = $('contacts-tbody');
+    if (state.filtered.length === 0) {
+      tbody.innerHTML = `
+        <tr><td colspan="9">
+          <div class="empty-state">
+            <div class="empty-state-title">Nenhum contato encontrado</div>
+            <div class="empty-state-text">Ajuste os filtros ou aguarde novos leads chegarem.</div>
+          </div>
+        </td></tr>`;
+      return;
+    }
+    tbody.innerHTML = state.filtered.map(l => {
+      const stage = findStage(l.pipeline_status);
+      const av = avatarUrl(l.instagram, l.nome);
+      const assigned = l.assigned_to ? profileById(l.assigned_to) : null;
+      const fname = firstName(l.nome);
+      return `
+        <tr data-lead-id="${l.id}">
+          <td>
+            <div class="contact-name-cell">
+              <div class="contact-avatar">
+                ${av ? `<img src="${av}" alt="" onerror="this.parentElement.textContent='${initials(l.nome)}'">` : initials(l.nome)}
+              </div>
+              <div>
+                <div class="contact-name-text">${escapeHtml(l.nome || '—')}</div>
+                <div class="contact-handle">${escapeHtml(l.instagram || '')}</div>
+              </div>
+            </div>
+          </td>
+          <td><a href="${whatsappLink(l.telefone, fname)}" target="_blank" style="color:var(--accent)">${escapeHtml(l.telefone || '—')}</a></td>
+          <td>${escapeHtml(l.faturamento || '—')}</td>
+          <td>${escapeHtml(l.momento || '—')}</td>
+          <td style="font-variant-numeric:tabular-nums">${l.nota_geral != null ? Number(l.nota_geral).toFixed(1).replace('.', ',') : '—'}</td>
+          <td><span class="chip" style="background:${stage.color}33; color:#1A1A18">${escapeHtml(stage.label)}</span></td>
+          <td>${assigned ? escapeHtml(assigned.nome || assigned.email.split('@')[0]) : '<span style="color:var(--text-faded)">—</span>'}</td>
+          <td style="color:var(--text-muted)">${relativeTime(l.created_at)}</td>
+          <td>
+            <div class="row-actions" style="justify-content:flex-end">
+              <button class="row-action" data-action="view" title="Ver"><svg><use href="#i-search"/></svg></button>
+              <button class="row-action" data-action="edit" title="Editar"><svg><use href="#i-edit"/></svg></button>
+              ${isAdmin() ? `<button class="row-action danger" data-action="delete" title="Deletar"><svg><use href="#i-trash"/></svg></button>` : ''}
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    // Wire row actions
+    tbody.querySelectorAll('[data-action]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = btn.closest('tr').dataset.leadId;
+        const action = btn.dataset.action;
+        if (action === 'view') openLeadModal(id);
+        if (action === 'edit') openEditModal(id);
+        if (action === 'delete') deleteLead(id);
+      });
+    });
+
+    // Click na linha abre modal
+    tbody.querySelectorAll('tr[data-lead-id]').forEach(tr => {
+      tr.addEventListener('click', (e) => {
+        if (e.target.closest('button') || e.target.closest('a')) return;
+        openLeadModal(tr.dataset.leadId);
+      });
+    });
+  }
+
+  // ─── MÉTRICAS ───
+  function renderMetrics() {
+    const total = state.leads.length;
+    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const prevWeekAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
+    const wk = state.leads.filter(l => new Date(l.created_at).getTime() > weekAgo).length;
+    const prevWk = state.leads.filter(l => {
+      const t = new Date(l.created_at).getTime();
+      return t > prevWeekAgo && t <= weekAgo;
+    }).length;
+    const sold = state.leads.filter(l => l.pipeline_status === 'vendida').length;
+    const conv = total > 0 ? Math.round((sold / total) * 100) : 0;
+    const hot = state.leads.filter(l => leadTemperature(l) >= 4).length;
+    const unassigned = state.leads.filter(l => !l.assigned_to).length;
+
+    $('m-total').textContent = total;
+    $('m-week').textContent = wk;
+    $('m-vendida').textContent = sold;
+    $('m-conv').textContent = conv;
+    if ($('m-hot')) $('m-hot').textContent = hot;
+    if ($('m-unassigned')) $('m-unassigned').textContent = unassigned;
+
+    // Delta da semana
+    const delta = wk - prevWk;
+    const deltaEl = $('m-week-delta');
+    if (prevWk === 0 && wk === 0) {
+      deltaEl.textContent = '';
+      deltaEl.className = 'metric-delta flat';
+    } else if (delta > 0) {
+      deltaEl.innerHTML = `<svg width="11" height="11"><use href="#i-arrow-up"/></svg> +${delta} vs semana anterior`;
+      deltaEl.className = 'metric-delta up';
+    } else if (delta < 0) {
+      deltaEl.innerHTML = `<svg width="11" height="11"><use href="#i-arrow-down"/></svg> ${delta} vs semana anterior`;
+      deltaEl.className = 'metric-delta down';
+    } else {
+      deltaEl.textContent = '= vs semana anterior';
+      deltaEl.className = 'metric-delta flat';
+    }
+
+    renderFunnel();
+    renderTimelineChart();
+    renderLeaderboard();
+    renderRevenueChart();
+  }
+
+  function renderLeaderboard() {
+    const el = $('leaderboard');
+    if (!el) return;
+
+    // Calcula stats por vendedor: total atribuído, vendas, conversão
+    const stats = state.profiles.map(p => {
+      const leads = state.leads.filter(l => l.assigned_to === p.id);
+      const vendas = leads.filter(l => l.pipeline_status === 'vendida').length;
+      const total = leads.length;
+      const conv = total > 0 ? Math.round((vendas / total) * 100) : 0;
+      return {
+        profile: p,
+        total,
+        vendas,
+        conv,
+        score: vendas * 10 + total + conv * 0.1  // ranking composto
+      };
+    }).filter(s => s.total > 0)
+      .sort((a, b) => b.score - a.score);
+
+    if (stats.length === 0) {
+      el.innerHTML = `<div class="empty-state" style="padding:24px 0">
+        <div class="empty-state-text">Ainda não há leads atribuídos a vendedores.</div>
+      </div>`;
+      return;
+    }
+
+    const medalClass = ['gold', 'silver', 'bronze'];
+    el.innerHTML = stats.slice(0, 10).map((s, i) => {
+      const p = s.profile;
+      const av = profileAvatar(p);
+      return `
+        <div class="leader-row ${medalClass[i] || ''}">
+          <span class="leader-rank">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}</span>
+          <div class="leader-avatar">
+            <img src="${av}" alt="" onerror="this.parentElement.textContent='${initials(p.nome || p.email)}'">
+          </div>
+          <div class="leader-info">
+            <div class="leader-name">${escapeHtml(p.nome || p.email.split('@')[0])}</div>
+            <div class="leader-sub">${p.role === 'admin' ? 'Admin' : 'Vendedor'}</div>
+          </div>
+          <div class="leader-stats">
+            <div class="leader-stat">
+              <div class="leader-stat-num">${s.total}</div>
+              <div class="leader-stat-label">Leads</div>
+            </div>
+            <div class="leader-stat">
+              <div class="leader-stat-num" style="color:var(--success)">${s.vendas}</div>
+              <div class="leader-stat-label">Vendas</div>
+            </div>
+            <div class="leader-stat">
+              <div class="leader-stat-num" style="color:var(--accent)">${s.conv}%</div>
+              <div class="leader-stat-label">Conversão</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function renderFunnel() {
+    const f = $('funnel');
+    const counts = state.pipeline.map(s => ({
+      stage: s,
+      count: state.leads.filter(l => l.pipeline_status === s.id).length
+    }));
+    const max = Math.max(1, ...counts.map(c => c.count));
+
+    f.innerHTML = counts.map(({ stage, count }) => `
+      <div class="funnel-row">
+        <div class="funnel-label">
+          <span class="funnel-label-dot" style="background:${stage.color}"></span>
+          ${escapeHtml(stage.label)}
+        </div>
+        <div class="funnel-bar-wrap">
+          <div class="funnel-bar" style="width:${(count / max) * 100}%;background:${stage.color}"></div>
+          <span class="funnel-count">${count}</span>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function renderTimelineChart() {
+    const ctx = $('chart-timeline').getContext('2d');
+    if (state.charts.timeline) state.charts.timeline.destroy();
+
+    // Agrupa leads por dia (últimos 30 dias)
+    const days = 30;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const labels = [], data = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(today); d.setDate(d.getDate() - i);
+      const next = new Date(d); next.setDate(next.getDate() + 1);
+      const count = state.leads.filter(l => {
+        const t = new Date(l.created_at).getTime();
+        return t >= d.getTime() && t < next.getTime();
+      }).length;
+      labels.push(d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }));
+      data.push(count);
+    }
+
+    state.charts.timeline = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Leads',
+          data,
+          fill: true,
+          backgroundColor: 'rgba(15, 118, 110, 0.08)',
+          borderColor: '#0F766E',
+          borderWidth: 2,
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          pointBackgroundColor: '#0F766E',
+          tension: 0.3
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { displayColors: false } },
+        scales: {
+          x: { grid: { display: false }, ticks: { maxTicksLimit: 8, color: '#9CA3AF', font: { size: 10 } } },
+          y: { beginAtZero: true, grid: { color: '#E8E6E1' }, ticks: { stepSize: 1, color: '#9CA3AF', font: { size: 10 } } }
+        }
+      }
+    });
+  }
+
+  function renderRevenueChart() {
+    const ctx = $('chart-revenue').getContext('2d');
+    if (state.charts.revenue) state.charts.revenue.destroy();
+
+    const buckets = [
+      'Até R$ 5 mil/mês',
+      'R$ 5 a R$ 15 mil/mês',
+      'R$ 15 a R$ 30 mil/mês',
+      'R$ 30 a R$ 50 mil/mês',
+      'Acima de R$ 50 mil/mês'
+    ];
+    const data = buckets.map(b => state.leads.filter(l => l.faturamento === b).length);
+
+    state.charts.revenue = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: buckets.map(b => b.replace('R$ ', '').replace(' mil/mês', 'k').replace('Até ', '<')),
+        datasets: [{
+          data,
+          backgroundColor: '#0F766E',
+          borderRadius: 6,
+          borderSkipped: false,
+          maxBarThickness: 60
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { displayColors: false } },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: '#6B6B68', font: { size: 11 } } },
+          y: { beginAtZero: true, grid: { color: '#E8E6E1' }, ticks: { stepSize: 1, color: '#9CA3AF', font: { size: 10 } } }
+        }
+      }
+    });
+  }
+
+  // ─── TRACKING (Traqueamento por fonte) ───
+  function renderTracking() {
+    const container = $('tracking-cards');
+    if (!container) return;
+
+    // Agrupa leads por source_type
+    const groups = {};
+    state.filtered.forEach(l => {
+      const k = l.source_type || 'outro';
+      if (!groups[k]) groups[k] = [];
+      groups[k].push(l);
+    });
+
+    // Ordem desejada das fontes
+    const order = ['trafego_pago', 'stories', 'bio_link', 'direct', 'instagram_organico', 'facebook_organico', 'direto', 'outro'];
+    const sortedKeys = order.filter(k => groups[k] && groups[k].length > 0);
+
+    if (sortedKeys.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-title">Nenhum lead com fonte registrada ainda</div>
+          <div class="empty-state-text">Adicione UTMs nas URLs do quiz que você compartilha pra ver os dados aqui.</div>
+        </div>`;
+      return;
+    }
+
+    const html = sortedKeys.map(key => {
+      const meta = sourceMeta(key);
+      const leads = groups[key];
+      const total = leads.length;
+
+      // Conta por status do pipeline (procura ids padrão; se forem renomeados, busca por label aproximado)
+      const countByStatus = (statusKeyword) => {
+        const stage = state.pipeline.find(s =>
+          s.id === statusKeyword ||
+          s.label.toLowerCase().includes(statusKeyword.replace('_', ' '))
+        );
+        return stage ? leads.filter(l => l.pipeline_status === stage.id).length : 0;
+      };
+
+      const counts = {
+        leads:    total,
+        agendou:  countByStatus('agendou'),
+        realizou: countByStatus('call_realizada'),
+        comprou:  countByStatus('vendida'),
+        noshow:   countByStatus('no_show'),
+        perdeu:   countByStatus('perdida')
+      };
+
+      const pct = (n) => total > 0 ? Math.round((n / total) * 100) : 0;
+
+      return `
+        <div class="source-card" data-source="${key}">
+          <div class="source-head">
+            <div class="source-icon" style="background:${meta.bg}">${meta.icon}</div>
+            <div style="min-width:0;flex:1">
+              <div class="source-name">${escapeHtml(meta.label)}</div>
+              <div class="source-sub">clique pra ver leads</div>
+            </div>
+            <div style="text-align:right">
+              <div class="source-total">${total}</div>
+              <div class="source-total-label">Leads</div>
+            </div>
+          </div>
+          <div class="source-metrics">
+            <div class="source-metric">
+              <div class="source-metric-label">Vieram</div>
+              <div class="source-metric-value">${counts.leads}<span class="source-metric-pct">100%</span></div>
+            </div>
+            <div class="source-metric">
+              <div class="source-metric-label">Agendaram</div>
+              <div class="source-metric-value">${counts.agendou}<span class="source-metric-pct">${pct(counts.agendou)}%</span></div>
+            </div>
+            <div class="source-metric">
+              <div class="source-metric-label">Realizaram</div>
+              <div class="source-metric-value">${counts.realizou}<span class="source-metric-pct">${pct(counts.realizou)}%</span></div>
+            </div>
+            <div class="source-metric">
+              <div class="source-metric-label">Compraram</div>
+              <div class="source-metric-value">${counts.comprou}<span class="source-metric-pct">${pct(counts.comprou)}%</span></div>
+            </div>
+            <div class="source-metric">
+              <div class="source-metric-label">No show</div>
+              <div class="source-metric-value">${counts.noshow}<span class="source-metric-pct">${pct(counts.noshow)}%</span></div>
+            </div>
+            <div class="source-metric">
+              <div class="source-metric-label">Perderam</div>
+              <div class="source-metric-value">${counts.perdeu}<span class="source-metric-pct">${pct(counts.perdeu)}%</span></div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+    container.innerHTML = html;
+
+    // Wire clicks pra abrir modal de detalhes
+    container.querySelectorAll('.source-card').forEach(card => {
+      card.addEventListener('click', () => {
+        openSourceModal(card.dataset.source);
+      });
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // MODAL: Detalhes de uma fonte (lista de leads + criativos)
+  // ═══════════════════════════════════════════════════════════════════
+  let sourceModalState = { key: null, tab: 'leads' };
+
+  function openSourceModal(sourceKey) {
+    const meta = sourceMeta(sourceKey);
+    const leads = state.leads.filter(l => (l.source_type || 'outro') === sourceKey);
+
+    sourceModalState = { key: sourceKey, tab: 'leads' };
+
+    $('source-modal-icon').textContent = meta.icon;
+    $('source-modal-icon').style.background = meta.bg;
+    $('source-modal-name').textContent = meta.label;
+    $('source-modal-sub').textContent = `${leads.length} ${leads.length === 1 ? 'lead chegou' : 'leads chegaram'} por este canal`;
+    $('source-modal-total').textContent = leads.length;
+
+    // Mostra/esconde tabs específicas de tráfego pago
+    $$('#source-modal-tabs .source-tab').forEach(t => {
+      const only = t.dataset.only;
+      if (only) t.style.display = (sourceKey === only) ? '' : 'none';
+      t.classList.toggle('active', t.dataset.tab === 'leads');
+    });
+
+    renderSourceModalContent(leads);
+    $('source-modal-backdrop').classList.add('show');
+  }
+
+  function renderSourceModalContent(leads) {
+    const content = $('source-modal-content');
+    const tab = sourceModalState.tab;
+
+    if (tab === 'leads') {
+      if (leads.length === 0) {
+        content.innerHTML = '<div class="empty-state"><div class="empty-state-text">Nenhum lead deste canal ainda.</div></div>';
+        return;
+      }
+      content.innerHTML = `<div class="mini-lead-list">${leads.map(l => miniLeadRow(l)).join('')}</div>`;
+      content.querySelectorAll('.mini-lead-row').forEach(r => {
+        r.addEventListener('click', () => {
+          $('source-modal-backdrop').classList.remove('show');
+          openLeadModal(r.dataset.leadId);
+        });
+      });
+    } else if (tab === 'campaigns') {
+      content.innerHTML = renderSourceBreakdown(leads, 'source_campaign', 'Campanha');
+    } else if (tab === 'creatives') {
+      content.innerHTML = renderSourceBreakdown(leads, 'source_creative', 'Criativo');
+    }
+  }
+
+  function miniLeadRow(l) {
+    const stage = findStage(l.pipeline_status);
+    const av = avatarUrl(l.instagram, l.nome);
+    return `
+      <div class="mini-lead-row" data-lead-id="${l.id}">
+        <div class="mini-lead-avatar"><img src="${av}" alt="" onerror="this.parentElement.textContent='${initials(l.nome)}'"></div>
+        <div class="mini-lead-info">
+          <div class="mini-lead-name">${escapeHtml(l.nome)} ${tempGauge(leadTemperature(l))}</div>
+          <div class="mini-lead-meta">${escapeHtml(l.instagram || '')} · ${escapeHtml(l.faturamento || '—')}${l.source_campaign ? ' · ' + escapeHtml(l.source_campaign) : ''}</div>
+        </div>
+        <span class="mini-lead-status" style="background:${stage.color}33;color:#1A1A18">${escapeHtml(stage.label)}</span>
+        <span class="mini-lead-time">${relativeTime(l.created_at)}</span>
+      </div>
+    `;
+  }
+
+  function renderSourceBreakdown(leads, field, label) {
+    const groups = {};
+    leads.forEach(l => {
+      const k = l[field] || 'sem ' + label.toLowerCase();
+      if (!groups[k]) groups[k] = [];
+      groups[k].push(l);
+    });
+    const rows = Object.entries(groups).map(([k, arr]) => {
+      const total = arr.length;
+      const agendou  = arr.filter(l => l.pipeline_status === 'agendou').length;
+      const realizou = arr.filter(l => l.pipeline_status === 'call_realizada').length;
+      const vendida  = arr.filter(l => l.pipeline_status === 'vendida').length;
+      const conv = total > 0 ? Math.round((vendida / total) * 100) : 0;
+      return { k, total, agendou, realizou, vendida, conv };
+    }).sort((a, b) => b.total - a.total);
+
+    if (rows.length === 0) {
+      return '<div class="empty-state"><div class="empty-state-text">Sem dados de ' + label.toLowerCase() + ' neste canal.</div></div>';
+    }
+
+    return `
+      <table class="creative-table">
+        <thead>
+          <tr>
+            <th>${escapeHtml(label)}</th>
+            <th class="num" style="text-align:right">Leads</th>
+            <th class="num" style="text-align:right">Agendou</th>
+            <th class="num" style="text-align:right">Realizou</th>
+            <th class="num" style="text-align:right">Vendeu</th>
+            <th class="num" style="text-align:right">Conv.</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(r => `
+            <tr>
+              <td>${escapeHtml(r.k)}</td>
+              <td class="num">${r.total}</td>
+              <td class="num">${r.agendou}</td>
+              <td class="num">${r.realizou}</td>
+              <td class="num" style="color:var(--success)">${r.vendida}</td>
+              <td class="num" style="color:var(--accent)">${r.conv}%</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  // ─── SETTINGS ───
+  function renderSettings() {
+    // Meu perfil é sempre renderizado (todos têm acesso ao próprio perfil)
+    renderProfileSection();
+
+    // Pipeline editor, Vendedores e WhatsApp: apenas admin
+    const adminSections = ['settings-pipeline', 'settings-vendors', 'settings-whatsapp'];
+    adminSections.forEach(id => {
+      const el = $(id);
+      if (el) el.style.display = canSee('settings') ? '' : 'none';
+    });
+
+    if (canSee('settings')) {
+      renderPipelineEditor();
+      renderVendors();
+      loadWhatsAppConfig();
+    }
+  }
+
+  // ─── Configuração WhatsApp API ───
+  async function loadWhatsAppConfig() {
+    const { data, error } = await supabase
+      .from('whatsapp_config').select('*').eq('id', 1).maybeSingle();
+    if (error) { console.warn('Erro wa config:', error); return; }
+    const c = data || {};
+
+    $('wa-enabled').checked = !!c.enabled;
+    $('wa-phone-id').value = c.phone_number_id || '';
+    $('wa-business-id').value = c.business_account_id || '';
+    $('wa-token').value = c.token || '';
+    $('wa-verify-token').value = c.verify_token || '';
+    $('wa-tpl-novo-lead').value = c.template_novo_lead || 'novo_lead_revela';
+    $('wa-tpl-iniciar').value = c.template_iniciar_conversa || 'iniciar_conversa';
+    $('wa-webhook-url').textContent = CONFIG.SUPABASE_URL + '/functions/v1/whatsapp-webhook';
+
+    // Status
+    const dot = $('wa-status-dot');
+    const txt = $('wa-status-text');
+    const hasToken = !!(c.token);
+    const hasPhone = !!(c.phone_number_id);
+    if (c.enabled && hasToken && hasPhone) {
+      dot.className = 'wa-status-dot on';
+      txt.textContent = 'Integração ativa e configurada';
+    } else if (hasToken || hasPhone) {
+      dot.className = 'wa-status-dot partial';
+      txt.textContent = 'Configuração incompleta — preencha todos os campos e marque "Integração ativa"';
+    } else {
+      dot.className = 'wa-status-dot off';
+      txt.textContent = 'Não configurado — preencha os campos abaixo';
+    }
+  }
+
+  async function saveWhatsAppConfig() {
+    const btn = $('btn-save-whatsapp');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Salvando';
+
+    const patch = {
+      enabled: $('wa-enabled').checked,
+      phone_number_id: $('wa-phone-id').value.trim() || null,
+      business_account_id: $('wa-business-id').value.trim() || null,
+      token: $('wa-token').value.trim() || null,
+      verify_token: $('wa-verify-token').value.trim() || null,
+      template_novo_lead: $('wa-tpl-novo-lead').value.trim() || 'novo_lead_revela',
+      template_iniciar_conversa: $('wa-tpl-iniciar').value.trim() || 'iniciar_conversa',
+      updated_at: new Date().toISOString(),
+      updated_by: state.user.id
+    };
+
+    const { error } = await supabase.from('whatsapp_config').update(patch).eq('id', 1);
+
+    btn.disabled = false;
+    btn.innerHTML = '<svg><use href="#i-check"/></svg> Salvar';
+
+    if (error) {
+      toast('Erro ao salvar: ' + error.message, 'error');
+    } else {
+      toast('Configuração WhatsApp salva', 'success');
+      loadWhatsAppConfig();
+    }
+  }
+
+  function renderProfileSection() {
+    const p = state.profile;
+    if (!p) return;
+
+    // Display info
+    $('profile-name-display').textContent = p.nome || p.email.split('@')[0];
+    $('profile-email-display').textContent = p.email;
+    $('profile-role-display').textContent = p.role;
+
+    // Avatar grande (usa foto enviada se houver)
+    const avatarEl = $('profile-avatar');
+    const av = profileAvatar(p);
+    avatarEl.innerHTML = `<img src="${av}" alt="" onerror="this.parentElement.textContent='${initials(p.nome || p.email)}'">`;
+
+    // Form values
+    $('profile-nome').value = p.nome || '';
+    $('profile-telefone').value = p.telefone || '';
+    $('profile-password').value = '';
+  }
+
+  async function saveProfile() {
+    const nome = $('profile-nome').value.trim();
+    const telefone = $('profile-telefone').value.trim();
+    const password = $('profile-password').value;
+    const btn = $('btn-save-profile');
+
+    if (!nome) { toast('Nome não pode ficar vazio', 'error'); return; }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Salvando';
+
+    try {
+      // Atualiza profile (nome, telefone)
+      const { error: pErr } = await supabase.from('profiles')
+        .update({ nome, telefone })
+        .eq('id', state.user.id);
+      if (pErr) throw pErr;
+
+      // Atualiza senha se preenchida
+      if (password) {
+        if (password.length < 6) throw new Error('Senha precisa ter no mínimo 6 caracteres');
+        const { error: aErr } = await supabase.auth.updateUser({ password });
+        if (aErr) throw aErr;
+      }
+
+      // Recarrega profile no state
+      await loadProfile();
+
+      // Atualiza UI do sidebar
+      $('user-name').textContent = state.profile.nome || state.profile.email.split('@')[0];
+
+      // Re-renderiza a section
+      renderProfileSection();
+
+      toast('Perfil atualizado', 'success');
+    } catch (err) {
+      toast('Erro: ' + err.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<svg><use href="#i-check"/></svg> Salvar perfil';
+    }
+  }
+
+  // Upload de foto de perfil — redimensiona no navegador e salva como data URL
+  function handleAvatarUpload(file) {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { toast('Selecione um arquivo de imagem', 'error'); return; }
+    if (file.size > 8 * 1024 * 1024) { toast('Imagem muito grande (máx 8MB)', 'error'); return; }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = async () => {
+        // Crop central quadrado + redimensiona pra 256x256
+        const size = 256;
+        const canvas = document.createElement('canvas');
+        canvas.width = size; canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        const min = Math.min(img.width, img.height);
+        const sx = (img.width - min) / 2;
+        const sy = (img.height - min) / 2;
+        ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+
+        const { error } = await supabase.from('profiles')
+          .update({ avatar_url: dataUrl })
+          .eq('id', state.user.id);
+        if (error) { toast('Erro ao salvar foto: ' + error.message, 'error'); return; }
+
+        state.profile.avatar_url = dataUrl;
+        renderProfileSection();
+        // Atualiza avatares do topbar/dropdown na hora
+        ['topbar-user-avatar', 'user-dropdown-avatar'].forEach(id => {
+          const el = $(id);
+          if (el) el.innerHTML = `<img src="${dataUrl}" alt="">`;
+        });
+        toast('Foto de perfil atualizada', 'success');
+      };
+      img.onerror = () => toast('Não foi possível ler a imagem', 'error');
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function renderPipelineEditor() {
+    const ed = $('pipeline-editor');
+    ed.innerHTML = state.pipeline.map((stage, idx) => `
+      <div class="pipeline-row" data-stage-id="${stage.id}">
+        <span class="pipeline-handle"><svg><use href="#i-drag"/></svg></span>
+        <input type="color" class="pipeline-color" value="${stage.color}" data-color>
+        <input type="text" class="pipeline-name-input" value="${escapeHtml(stage.label)}" maxlength="40" data-label>
+        <button class="pipeline-remove" data-remove ${state.pipeline.length <= 3 ? 'disabled style="opacity:0.3;cursor:not-allowed"' : ''} title="Remover">
+          <svg style="width:14px;height:14px"><use href="#i-trash"/></svg>
+        </button>
+      </div>
+    `).join('');
+
+    // Sortable na lista de etapas
+    new Sortable(ed, {
+      animation: 150,
+      handle: '.pipeline-handle',
+      ghostClass: 'sortable-ghost'
+    });
+
+    // Wire remove buttons
+    ed.querySelectorAll('[data-remove]').forEach(btn => {
+      btn.addEventListener('click', e => {
+        if (state.pipeline.length <= 3) return;
+        const row = btn.closest('.pipeline-row');
+        row.style.transition = 'all 0.2s'; row.style.opacity = '0'; row.style.transform = 'translateX(-20px)';
+        setTimeout(() => row.remove(), 200);
+      });
+    });
+  }
+
+  function readPipelineEditor() {
+    const rows = $('pipeline-editor').querySelectorAll('.pipeline-row');
+    return Array.from(rows).map((r, idx) => {
+      const id = r.dataset.stageId || ('stage_' + Date.now() + '_' + idx);
+      const label = r.querySelector('[data-label]').value.trim();
+      const color = r.querySelector('[data-color]').value;
+      return { id, label, color, order: idx };
+    }).filter(s => s.label);
+  }
+
+  function renderVendors() {
+    const list = $('vendors-list');
+    if (state.profiles.length === 0) {
+      list.innerHTML = '<div class="empty-state"><div class="empty-state-text">Nenhum vendedor cadastrado ainda.</div></div>';
+      return;
+    }
+    list.innerHTML = state.profiles.map(p => `
+      <div class="vendor-row" data-vendor-id="${p.id}">
+        <div class="vendor-avatar"><img src="${profileAvatar(p)}" alt="" onerror="this.parentElement.textContent='${initials(p.nome || p.email)}'"></div>
+        <div class="vendor-info">
+          <div class="vendor-name">${escapeHtml(p.nome || p.email.split('@')[0])} ${p.role === 'admin' ? '<span class="user-role-pill admin" style="margin-left:6px">admin</span>' : ''}</div>
+          <div class="vendor-email">${escapeHtml(p.email)} ${p.telefone ? ' · ' + escapeHtml(p.telefone) : ''}</div>
+        </div>
+        <div class="vendor-actions">
+          ${p.id !== state.user.id ? `<button class="row-action danger" data-vendor-delete="${p.id}" title="Remover"><svg><use href="#i-trash"/></svg></button>` : ''}
+        </div>
+      </div>
+    `).join('');
+
+    list.querySelectorAll('[data-vendor-delete]').forEach(btn => {
+      btn.addEventListener('click', () => deleteVendor(btn.dataset.vendorDelete));
+    });
+  }
+
+  async function deleteVendor(id) {
+    const p = profileById(id);
+    if (!p) return;
+    if (!confirm(`Remover ${p.nome || p.email}? O acesso ao CRM será revogado.`)) return;
+
+    // Marca como inativo (não deleta de auth.users, só do profile)
+    const { error } = await supabase.from('profiles').delete().eq('id', id);
+    if (error) { toast('Erro: ' + error.message, 'error'); return; }
+    state.profiles = state.profiles.filter(p => p.id !== id);
+    renderVendors();
+    toast('Vendedor removido', 'success');
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // CHAT WHATSAPP INTERNO
+  // ═══════════════════════════════════════════════════════════════════
+
+  async function loadConversations() {
+    const { data, error } = await supabase
+      .from('conversations')
+      .select('*, leads(id, nome, telefone, instagram)')
+      .order('last_message_at', { ascending: false, nullsFirst: false });
+    if (error) { console.warn('Erro conversations:', error); return; }
+    state.conversations = data || [];
+    updateChatUnreadBadge();
+  }
+
+  async function loadMessages(conversationId) {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('conversation_id', conversationId)
+      .order('created_at', { ascending: true })
+      .limit(500);
+    if (error) { console.warn('Erro messages:', error); return; }
+    state.messages[conversationId] = data || [];
+  }
+
+  function updateChatUnreadBadge() {
+    const totalUnread = state.conversations.reduce((sum, c) => sum + (c.unread_count || 0), 0);
+    const badge = $('nav-badge-chat');
+    if (!badge) return;
+    if (totalUnread > 0) {
+      badge.textContent = totalUnread > 99 ? '99+' : totalUnread;
+      badge.style.display = '';
+      badge.classList.add('unread');
+    } else {
+      badge.style.display = 'none';
+      badge.classList.remove('unread');
+    }
+  }
+
+  // ─── Render principal do chat ───
+  function renderChat() {
+    renderChatList();
+    if (state.activeConversationId) {
+      renderChatThread();
+    } else {
+      $('chat-thread-wrap').style.display = 'none';
+      $('chat-empty').style.display = '';
+    }
+  }
+
+  function renderChatList() {
+    const list = $('chat-list');
+    const term = state.chatSearchTerm.toLowerCase().trim();
+
+    let convs = state.conversations.slice();
+    if (term) {
+      convs = convs.filter(c => {
+        const lead = c.leads || {};
+        return (lead.nome || '').toLowerCase().includes(term) ||
+               (lead.instagram || '').toLowerCase().includes(term) ||
+               (lead.telefone || '').toLowerCase().includes(term) ||
+               (c.last_message_preview || '').toLowerCase().includes(term);
+      });
+    }
+
+    $('chat-list-count').textContent = `${convs.length} ${convs.length === 1 ? 'ativa' : 'ativas'}`;
+
+    if (convs.length === 0) {
+      list.innerHTML = `
+        <div class="chat-list-empty">
+          ${term ? 'Nenhuma conversa encontrada com este termo.' : 'Nenhuma conversa ainda. Inicie uma pelo botão 💬 do card de um lead.'}
+        </div>`;
+      return;
+    }
+
+    list.innerHTML = convs.map(c => {
+      const lead = c.leads || {};
+      const av = avatarUrl(lead.instagram, lead.nome);
+      const isActive = state.activeConversationId === c.id;
+      const unread = c.unread_count || 0;
+      const dir = c.last_message_direction === 'in' ? '←' : c.last_message_direction === 'out' ? '→' : '';
+
+      return `
+        <div class="chat-list-item ${isActive ? 'active' : ''}" data-conv-id="${c.id}">
+          <div class="chat-list-avatar">
+            <img src="${av}" alt="" onerror="this.parentElement.textContent='${initials(lead.nome)}'">
+          </div>
+          <div class="chat-list-info">
+            <div class="chat-list-name">${escapeHtml(lead.nome || lead.telefone || '—')}</div>
+            <div class="chat-list-preview">
+              ${dir ? `<span style="opacity:0.6">${dir}</span>` : ''}
+              ${escapeHtml(c.last_message_preview || 'Sem mensagens ainda')}
+            </div>
+          </div>
+          <div class="chat-list-meta">
+            <span class="chat-list-time">${c.last_message_at ? relativeTime(c.last_message_at) : ''}</span>
+            ${unread > 0 ? `<span class="chat-unread-pill">${unread > 99 ? '99+' : unread}</span>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    list.querySelectorAll('.chat-list-item').forEach(el => {
+      el.addEventListener('click', () => openChatConversation(el.dataset.convId));
+    });
+  }
+
+  function renderChatThread() {
+    const conv = state.conversations.find(c => c.id === state.activeConversationId);
+    if (!conv) {
+      $('chat-thread-wrap').style.display = 'none';
+      $('chat-empty').style.display = '';
+      return;
+    }
+
+    $('chat-empty').style.display = 'none';
+    $('chat-thread-wrap').style.display = '';
+
+    const lead = conv.leads || {};
+    $('chat-thread-name').textContent = lead.nome || lead.telefone || '—';
+    $('chat-thread-meta').textContent = `${lead.instagram || ''} · ${lead.telefone || conv.whatsapp_phone}`;
+
+    const av = $('chat-thread-avatar');
+    av.innerHTML = `<img src="${avatarUrl(lead.instagram, lead.nome)}" alt="" onerror="this.parentElement.textContent='${initials(lead.nome)}'">`;
+
+    // Renderiza mensagens
+    const msgs = state.messages[conv.id] || [];
+    const thread = $('chat-thread');
+
+    if (msgs.length === 0) {
+      thread.innerHTML = `<div class="chat-thread-empty">
+        Sem mensagens ainda. Envie a primeira mensagem abaixo (usará template se for fora da janela 24h).
+      </div>`;
+    } else {
+      thread.innerHTML = renderThreadMessages(msgs);
+    }
+
+    // Aviso de janela 24h
+    const warn = $('chat-composer-warn');
+    const lastInbound = conv.last_inbound_at ? new Date(conv.last_inbound_at).getTime() : 0;
+    const within24h = lastInbound > 0 && (Date.now() - lastInbound) < 24 * 60 * 60 * 1000;
+    if (!within24h && msgs.length > 0) {
+      warn.style.display = '';
+      warn.textContent = lastInbound > 0
+        ? '⏰ Fora da janela de 24h. Use o botão "Reabrir com template" pra retomar a conversa.'
+        : '💬 Lead ainda não respondeu. Primeira mensagem precisa ser um template aprovado.';
+    } else {
+      warn.style.display = 'none';
+    }
+
+    // Scroll pro final
+    setTimeout(() => { thread.scrollTop = thread.scrollHeight; }, 30);
+
+    // Marca como lida
+    if (conv.unread_count > 0) markConversationRead(conv.id);
+  }
+
+  function renderThreadMessages(msgs) {
+    let lastDay = '';
+    const parts = [];
+    msgs.forEach(m => {
+      const day = new Date(m.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
+      if (day !== lastDay) {
+        parts.push(`<div class="chat-day-divider">${day}</div>`);
+        lastDay = day;
+      }
+      parts.push(renderMessageBubble(m));
+    });
+    return parts.join('');
+  }
+
+  function renderMessageBubble(m) {
+    const isOut = m.direction === 'out';
+    const time = new Date(m.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const isTemplate = m.message_type === 'template';
+    const isFailed = m.status === 'failed';
+
+    let statusIcon = '';
+    if (isOut && !isFailed) {
+      if (m.status === 'read') {
+        statusIcon = `<span class="chat-msg-status-icon read" title="Lida"><svg><use href="#i-check-double"/></svg></span>`;
+      } else if (m.status === 'delivered') {
+        statusIcon = `<span class="chat-msg-status-icon delivered" title="Entregue"><svg><use href="#i-check"/></svg></span>`;
+      } else if (m.status === 'sent') {
+        statusIcon = `<span class="chat-msg-status-icon sent" title="Enviada"><svg><use href="#i-check"/></svg></span>`;
+      }
+    }
+
+    const cls = isOut
+      ? (isFailed ? 'chat-msg chat-msg-failed' : (isTemplate ? 'chat-msg chat-msg-template' : 'chat-msg chat-msg-out'))
+      : 'chat-msg chat-msg-in';
+
+    let content;
+    if (m.message_type === 'text' || m.message_type === 'template') {
+      content = `<div class="chat-msg-content">${escapeHtml(m.content || '')}</div>`;
+    } else {
+      content = `<div class="chat-msg-content" style="font-style:italic;opacity:0.85">[${m.message_type}]${m.content ? ' ' + escapeHtml(m.content) : ''}</div>`;
+    }
+
+    return `
+      <div class="${cls}">
+        ${content}
+        <div class="chat-msg-foot">
+          ${isTemplate ? '📋 ' : ''}${isFailed ? '⚠ ' + escapeHtml(m.error_message || 'falhou') + ' · ' : ''}${time}
+          ${statusIcon}
+        </div>
+      </div>
+    `;
+  }
+
+  // ─── Ações ───
+  async function openChatConversation(convId) {
+    state.activeConversationId = convId;
+    if (!state.messages[convId]) {
+      await loadMessages(convId);
+    }
+    renderChat();
+  }
+
+  async function openChatForLead(leadId) {
+    // Procura conversation pra esse lead
+    let conv = state.conversations.find(c => c.leads?.id === leadId || c.lead_id === leadId);
+
+    if (!conv) {
+      // Não existe ainda — cria stub localmente; será criada de verdade ao enviar 1ª msg
+      const lead = state.leads.find(l => l.id === leadId);
+      if (!lead) return;
+
+      // Tenta criar diretamente via supabase
+      const phone = String(lead.telefone || '').replace(/\D/g, '');
+      if (!phone) { toast('Lead sem telefone válido', 'error'); return; }
+
+      const { data, error } = await supabase
+        .from('conversations')
+        .insert({ lead_id: leadId, whatsapp_phone: phone })
+        .select('*, leads(id, nome, telefone, instagram)')
+        .single();
+
+      if (error) {
+        // Talvez já exista — recarrega e tenta de novo
+        await loadConversations();
+        conv = state.conversations.find(c => c.lead_id === leadId);
+        if (!conv) {
+          toast('Erro ao abrir conversa: ' + error.message, 'error');
+          return;
+        }
+      } else {
+        state.conversations.unshift(data);
+        conv = data;
+      }
+    }
+
+    switchView('chat');
+    await openChatConversation(conv.id);
+  }
+
+  async function markConversationRead(convId) {
+    const conv = state.conversations.find(c => c.id === convId);
+    if (!conv || conv.unread_count === 0) return;
+    conv.unread_count = 0;
+    updateChatUnreadBadge();
+    await supabase.rpc('mark_conversation_read', { conv_id: convId });
+  }
+
+  async function sendChatMessage(content, mode = 'text', templateName = null, templateParams = []) {
+    if (!state.activeConversationId) return;
+    const conv = state.conversations.find(c => c.id === state.activeConversationId);
+    if (!conv) return;
+
+    const input = $('chat-composer-input');
+    const sendBtn = $('chat-send-btn');
+    sendBtn.disabled = true;
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(CONFIG.SUPABASE_URL + '/functions/v1/whatsapp-send', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': CONFIG.SUPABASE_ANON_KEY,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          conversation_id: state.activeConversationId,
+          content,
+          mode,
+          template_name: templateName,
+          template_params: templateParams
+        })
+      });
+
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Falha no envio');
+
+      input.value = '';
+      input.style.height = 'auto';
+
+      // A mensagem aparecerá via realtime, mas pra UX rápida adiciona já localmente
+      if (json.message) {
+        if (!state.messages[state.activeConversationId]) state.messages[state.activeConversationId] = [];
+        const exists = state.messages[state.activeConversationId].find(m => m.id === json.message.id);
+        if (!exists) state.messages[state.activeConversationId].push(json.message);
+        renderChatThread();
+      }
+    } catch (err) {
+      toast('Erro ao enviar: ' + err.message, 'error');
+    } finally {
+      sendBtn.disabled = false;
+    }
+  }
+
+  function bindChatEvents() {
+    // Search
+    $('chat-search').addEventListener('input', e => {
+      state.chatSearchTerm = e.target.value;
+      renderChatList();
+    });
+
+    // Input auto-resize + send on Enter
+    const input = $('chat-composer-input');
+    const sendBtn = $('chat-send-btn');
+
+    function updateSendBtnState() {
+      sendBtn.disabled = !input.value.trim();
+    }
+    input.addEventListener('input', () => {
+      input.style.height = 'auto';
+      input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+      updateSendBtnState();
+    });
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        if (input.value.trim()) sendChatMessage(input.value.trim(), 'text');
+      }
+    });
+    sendBtn.addEventListener('click', () => {
+      if (input.value.trim()) sendChatMessage(input.value.trim(), 'text');
+    });
+
+    // Template button
+    $('chat-template-btn').addEventListener('click', () => {
+      const conv = state.conversations.find(c => c.id === state.activeConversationId);
+      if (!conv) return;
+      const lead = conv.leads || {};
+      const fname = firstName(lead.nome || '');
+      const ok = confirm(`Enviar template "iniciar_conversa" pra ${fname || 'este lead'}?\n\nIsso reabre a janela de 24h pra conversa livre.`);
+      if (!ok) return;
+      sendChatMessage(
+        `Template iniciar_conversa enviado para ${fname || 'lead'}`,
+        'template',
+        'iniciar_conversa',
+        [fname || 'lead']
+      );
+    });
+
+    // Ver lead
+    $('chat-view-lead').addEventListener('click', () => {
+      const conv = state.conversations.find(c => c.id === state.activeConversationId);
+      if (!conv) return;
+      openLeadModal(conv.lead_id);
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // MODAL: Detalhes do lead
+  // ═══════════════════════════════════════════════════════════════════
+  function openLeadModal(id) {
+    const lead = state.leads.find(l => l.id === id);
+    if (!lead) return;
+    state.currentLead = lead;
+
+    const handle = lead.instagram || '';
+    $('modal-name').textContent = lead.nome || '—';
+    $('modal-handle').textContent = handle;
+    $('modal-faturamento').textContent = lead.faturamento || '—';
+    $('modal-momento').textContent = lead.momento || '—';
+    $('modal-nota').textContent = lead.nota_geral != null
+      ? Number(lead.nota_geral).toFixed(2).replace('.', ',') + ' / 5' : '—';
+    $('modal-telefone').textContent = lead.telefone || '—';
+    $('modal-data').textContent = formatDate(lead.created_at);
+
+    // Origem do lead (campos do tracking)
+    const origemEl = $('modal-origem');
+    if (origemEl) {
+      if (lead.source_type) {
+        const sm = sourceMeta(lead.source_type);
+        const parts = [`${sm.icon} ${sm.label}`];
+        if (lead.source_campaign) parts.push(`Campanha: <strong>${escapeHtml(lead.source_campaign)}</strong>`);
+        if (lead.source_creative) parts.push(`Criativo: <strong>${escapeHtml(lead.source_creative)}</strong>`);
+        if (lead.source_medium)   parts.push(`Mídia: ${escapeHtml(lead.source_medium)}`);
+        origemEl.innerHTML = parts.join(' · ');
+      } else if (lead.origem) {
+        origemEl.textContent = lead.origem;
+      } else {
+        origemEl.textContent = '—';
+      }
+    }
+
+    // Temperatura do lead
+    const tempEl = $('modal-temp');
+    if (tempEl) tempEl.innerHTML = tempMeter(leadTemperature(lead));
+
+    // Avatar
+    const av = $('modal-avatar-img');
+    const url = avatarUrl(handle, lead.nome);
+    if (url) {
+      av.src = url; av.style.display = '';
+      av.onerror = () => { av.style.display = 'none'; av.parentElement.textContent = initials(lead.nome); };
+    } else {
+      av.style.display = 'none'; av.parentElement.textContent = initials(lead.nome);
+    }
+
+    // Summary
+    const sumEl = $('modal-summary');
+    if (lead.instagram_summary) {
+      sumEl.textContent = lead.instagram_summary;
+      sumEl.classList.remove('loading');
+    } else {
+      sumEl.textContent = 'Gerando resumo';
+      sumEl.classList.add('loading');
+      ensureSummary(lead).then(s => {
+        if (state.currentLead?.id === id && s) {
+          sumEl.textContent = s;
+          sumEl.classList.remove('loading');
+        }
+      });
+    }
+
+    // Top 3
+    const tops = topsToList(lead);
+    $('modal-top-list').innerHTML = tops.length
+      ? tops.map((t, i) => `<div class="top-item"><span class="top-rank">0${i + 1}</span><span>${escapeHtml(t)}</span></div>`).join('')
+      : '<div style="color:var(--text-faded);font-size:12px">Sem pontos críticos identificados</div>';
+
+    // Notes
+    $('modal-notes').value = lead.resumo_manual || '';
+
+    // Status picker (usa pipeline dinâmico)
+    $('status-picker').innerHTML = state.pipeline.map(s => `
+      <button class="status-pick ${s.id === lead.pipeline_status ? 'active' : ''}"
+              style="--col-color:${s.color}" data-status="${s.id}">
+        <span class="status-pick-dot"></span>${escapeHtml(s.label)}
+      </button>
+    `).join('');
+    $('status-picker').querySelectorAll('.status-pick').forEach(b => {
+      b.addEventListener('click', async () => {
+        const ns = b.dataset.status;
+        if (ns === state.currentLead.pipeline_status) return;
+        await updateLead(state.currentLead.id, { pipeline_status: ns });
+        state.currentLead.pipeline_status = ns;
+        $('status-picker').querySelectorAll('.status-pick').forEach(o => o.classList.remove('active'));
+        b.classList.add('active');
+      });
+    });
+
+    // Assigned to
+    const assignSel = $('modal-assigned');
+    assignSel.innerHTML = `<option value="">Não atribuído</option>` +
+      state.profiles.map(p => `<option value="${p.id}" ${p.id === lead.assigned_to ? 'selected' : ''}>${escapeHtml(p.nome || p.email)}</option>`).join('');
+    assignSel.onchange = () => updateLead(lead.id, { assigned_to: assignSel.value || null });
+
+    // Links
+    const fname = firstName(lead.nome);
+    $('modal-wa').href = whatsappLink(lead.telefone, fname);
+    $('modal-ig').href = instagramLink(handle);
+    $('modal-report').href = reportLink(lead);
+    $('modal-delete').style.display = isAdmin() ? '' : 'none';
+
+    $('modal-backdrop').classList.add('show');
+  }
+
+  function closeAllModals() {
+    $('modal-backdrop').classList.remove('show');
+    $('edit-modal-backdrop').classList.remove('show');
+    $('vendor-modal-backdrop').classList.remove('show');
+    $('source-modal-backdrop').classList.remove('show');
+    state.currentLead = null;
+    state.editingLead = null;
+  }
+
+  // Auto-save de notas
+  let notesDebounce = null;
+  $('modal-notes').addEventListener('input', () => {
+    if (!state.currentLead) return;
+    clearTimeout(notesDebounce);
+    notesDebounce = setTimeout(async () => {
+      const ok = await updateLead(state.currentLead.id, { resumo_manual: $('modal-notes').value });
+      if (ok) toast('Anotações salvas', 'success');
+    }, 800);
+  });
+
+  // ═══════════════════════════════════════════════════════════════════
+  // MODAL: Editar lead
+  // ═══════════════════════════════════════════════════════════════════
+  function openEditModal(id) {
+    const lead = state.leads.find(l => l.id === id);
+    if (!lead) return;
+    state.editingLead = lead;
+    $('edit-nome').value = lead.nome || '';
+    $('edit-telefone').value = lead.telefone || '';
+    $('edit-instagram').value = (lead.instagram || '').replace(/^@/, '');
+    $('edit-faturamento').value = lead.faturamento || '';
+    $('edit-modal-backdrop').classList.add('show');
+  }
+
+  async function saveEdit() {
+    if (!state.editingLead) return;
+    const patch = {
+      nome: $('edit-nome').value.trim(),
+      telefone: $('edit-telefone').value.trim(),
+      instagram: '@' + $('edit-instagram').value.trim().replace(/^@/, ''),
+      faturamento: $('edit-faturamento').value || null
+    };
+    const ok = await updateLead(state.editingLead.id, patch);
+    if (ok) {
+      toast('Lead atualizado', 'success');
+      $('edit-modal-backdrop').classList.remove('show');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // MODAL: Novo vendedor
+  // ═══════════════════════════════════════════════════════════════════
+  function openVendorModal() {
+    $('vendor-name').value = '';
+    $('vendor-email').value = '';
+    $('vendor-phone').value = '';
+    $('vendor-password').value = generatePassword();
+    $('vendor-role').value = 'vendedor';
+    // Reset permissões pro default (vendedor)
+    const defaults = defaultPerms('vendedor');
+    $$('#vendor-perms input[type="checkbox"]').forEach(cb => {
+      cb.checked = !!defaults[cb.dataset.perm];
+    });
+    $('vendor-modal-backdrop').classList.add('show');
+  }
+
+  function generatePassword() {
+    const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
+    let p = '';
+    for (let i = 0; i < 10; i++) p += chars.charAt(Math.floor(Math.random() * chars.length));
+    return p;
+  }
+
+  async function saveVendor() {
+    const name = $('vendor-name').value.trim();
+    const email = $('vendor-email').value.trim().toLowerCase();
+    const phone = $('vendor-phone').value.trim();
+    const password = $('vendor-password').value;
+    const role = $('vendor-role').value;
+
+    // Lê permissões dos checkboxes
+    const permissions = {};
+    $$('#vendor-perms input[type="checkbox"]').forEach(cb => {
+      permissions[cb.dataset.perm] = cb.checked;
+    });
+
+    if (!name || !email || !password) { toast('Preencha nome, email e senha', 'error'); return; }
+    if (password.length < 6) { toast('Senha precisa de no mínimo 6 caracteres', 'error'); return; }
+
+    // Cria o usuário via signUp (público) — funciona porque a confirmação de email está OFF
+    const { data, error } = await supabase.auth.signUp({
+      email, password,
+      options: { data: { name, role } }
+    });
+    if (error) {
+      toast('Erro: ' + error.message, 'error');
+      return;
+    }
+    if (!data.user) { toast('Falha ao criar usuário', 'error'); return; }
+
+    // Atualiza profile criado pelo trigger com nome, telefone, role e permissions
+    const { error: profileErr } = await supabase.from('profiles')
+      .update({ nome: name, telefone: phone, role, permissions })
+      .eq('id', data.user.id);
+    if (profileErr) console.warn('Erro ao atualizar profile:', profileErr);
+
+    await loadProfiles();
+    renderVendors();
+    $('vendor-modal-backdrop').classList.remove('show');
+    toast(`${name} cadastrado. Avise por WhatsApp/Email: senha ${password}`, 'success');
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // EVENT BINDINGS
+  // ═══════════════════════════════════════════════════════════════════
+  function bindEvents() {
+    // Login
+    $('login-form').addEventListener('submit', e => {
+      e.preventDefault();
+      login($('login-email').value.trim(), $('login-password').value);
+    });
+    // Menu de usuário (topbar)
+    const userWrap = document.querySelector('.topbar-user-wrap');
+    $('topbar-user').addEventListener('click', (e) => {
+      e.stopPropagation();
+      userWrap.classList.toggle('open');
+    });
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.topbar-user-wrap')) userWrap.classList.remove('open');
+    });
+    document.querySelectorAll('.user-dropdown-item').forEach(item => {
+      item.addEventListener('click', () => {
+        userWrap.classList.remove('open');
+        const action = item.dataset.action;
+        if (action === 'logout') logout();
+        if (action === 'profile') switchView('settings');
+      });
+    });
+
+    // Navegação
+    $$('.nav-item').forEach(b => {
+      b.addEventListener('click', () => switchView(b.dataset.view));
+    });
+
+    // Busca
+    $('search-input').addEventListener('input', e => {
+      state.searchTerm = e.target.value;
+      renderAll();
+    });
+
+    // Filtros
+    $('filter-vendor').addEventListener('change', e => { state.filters.vendor = e.target.value; renderAll(); });
+    $('filter-revenue').addEventListener('change', e => { state.filters.revenue = e.target.value; renderAll(); });
+    $('filter-period').addEventListener('change', e => { state.filters.period = e.target.value; renderAll(); });
+    $('filter-clear').addEventListener('click', () => {
+      state.filters = { vendor: '', revenue: '', period: '' };
+      state.searchTerm = '';
+      $('search-input').value = '';
+      $$('.filter-select').forEach(s => s.value = '');
+      renderAll();
+    });
+
+    // Modal lead
+    $('modal-close').addEventListener('click', closeAllModals);
+    $('modal-backdrop').addEventListener('click', e => { if (e.target === $('modal-backdrop')) closeAllModals(); });
+    $('modal-delete').addEventListener('click', () => {
+      if (state.currentLead) deleteLead(state.currentLead.id);
+    });
+
+    // Modal edit
+    $('edit-modal-close').addEventListener('click', closeAllModals);
+    $('edit-modal-backdrop').addEventListener('click', e => { if (e.target === $('edit-modal-backdrop')) closeAllModals(); });
+    $('edit-cancel').addEventListener('click', closeAllModals);
+    $('edit-save').addEventListener('click', saveEdit);
+
+    // Modal vendor
+    $('vendor-modal-close').addEventListener('click', closeAllModals);
+    $('vendor-modal-backdrop').addEventListener('click', e => { if (e.target === $('vendor-modal-backdrop')) closeAllModals(); });
+    $('vendor-cancel').addEventListener('click', closeAllModals);
+    $('vendor-save').addEventListener('click', saveVendor);
+    $('btn-add-vendor').addEventListener('click', openVendorModal);
+
+    // Quando muda a função, recalcula defaults de permissão
+    $('vendor-role').addEventListener('change', () => {
+      const role = $('vendor-role').value;
+      const defs = defaultPerms(role);
+      $$('#vendor-perms input[type="checkbox"]').forEach(cb => {
+        cb.checked = !!defs[cb.dataset.perm];
+      });
+    });
+
+    // Source detail modal
+    $('source-modal-close').addEventListener('click', closeAllModals);
+    $('source-modal-backdrop').addEventListener('click', e => {
+      if (e.target === $('source-modal-backdrop')) closeAllModals();
+    });
+    $$('#source-modal-tabs .source-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        if (tab.style.display === 'none') return;
+        sourceModalState.tab = tab.dataset.tab;
+        $$('#source-modal-tabs .source-tab').forEach(t => t.classList.toggle('active', t === tab));
+        const leads = state.leads.filter(l => (l.source_type || 'outro') === sourceModalState.key);
+        renderSourceModalContent(leads);
+      });
+    });
+
+    // Save profile
+    $('btn-save-profile').addEventListener('click', saveProfile);
+
+    // Upload de foto de perfil
+    $('profile-avatar-btn').addEventListener('click', () => $('profile-avatar-input').click());
+    $('profile-avatar-input').addEventListener('change', (e) => {
+      if (e.target.files && e.target.files[0]) handleAvatarUpload(e.target.files[0]);
+    });
+
+    // Save WhatsApp config
+    $('btn-save-whatsapp').addEventListener('click', saveWhatsAppConfig);
+
+    // Chat events
+    bindChatEvents();
+
+    // Botão "Abrir chat interno" no modal de lead
+    $('modal-chat').addEventListener('click', () => {
+      if (state.currentLead) {
+        const leadId = state.currentLead.id;
+        closeAllModals();
+        openChatForLead(leadId);
+      }
+    });
+
+    // Pipeline editor
+    $('pipeline-add').addEventListener('click', () => {
+      if (state.pipeline.length >= 10) { toast('Máximo de 10 etapas', 'error'); return; }
+      const colors = ['#A5B4FC', '#FDBA74', '#86EFAC', '#D4D4D8', '#FCD34D', '#34D399', '#FCA5A5', '#67E8F9', '#F0ABFC', '#FDA4AF'];
+      const newColor = colors[state.pipeline.length % colors.length];
+      const newStage = { id: 'stage_' + Date.now(), label: 'Nova etapa', color: newColor, order: state.pipeline.length };
+      state.pipeline.push(newStage);
+      renderPipelineEditor();
+    });
+    $('btn-save-pipeline').addEventListener('click', async () => {
+      const newPipeline = readPipelineEditor();
+      if (newPipeline.length < 3) { toast('Mínimo de 3 etapas', 'error'); return; }
+      const btn = $('btn-save-pipeline');
+      btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Salvando';
+      await savePipeline(newPipeline);
+      btn.disabled = false; btn.innerHTML = '<svg><use href="#i-check"/></svg> Salvar';
+    });
+
+    // ESC fecha modais
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') closeAllModals();
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // INIT
+  // ═══════════════════════════════════════════════════════════════════
+  bindEvents();
+  tryRestoreSession();
+
+})();
