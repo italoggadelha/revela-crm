@@ -42,6 +42,8 @@
     tasks: [],
     editingTask: null,
     taskFilter: 'pending',
+    // Playbook
+    playbookTab: '',
     // Chat
     conversations: [],
     messages: {},                 // { conversationId: [msgs] }
@@ -128,9 +130,9 @@
   // ─── Permissões ───
   function defaultPerms(role) {
     if (role === 'admin') {
-      return { dashboard: true, pipeline: true, chat: true, contacts: true, tasks: true, tracking: true, settings: true };
+      return { dashboard: true, pipeline: true, chat: true, contacts: true, tasks: true, tracking: true, playbook: true, settings: true };
     }
-    return { dashboard: true, pipeline: true, chat: true, contacts: true, tasks: true, tracking: true, settings: false };
+    return { dashboard: true, pipeline: true, chat: true, contacts: true, tasks: true, tracking: true, playbook: true, settings: false };
   }
 
   function userPerms() {
@@ -312,8 +314,8 @@
       const fallback = ['dashboard', 'pipeline', 'contacts', 'tracking', 'settings']
         .find(v => canSee(v === 'pipeline' ? 'pipeline' : v));
       // map de view name pra permission
-      const order = ['dashboard', 'pipeline', 'contacts', 'tasks', 'tracking', 'settings'];
-      const perms = ['dashboard', 'pipeline', 'contacts', 'tasks', 'tracking', 'settings'];
+      const order = ['dashboard', 'pipeline', 'contacts', 'tasks', 'tracking', 'playbook', 'settings'];
+      const perms = ['dashboard', 'pipeline', 'contacts', 'tasks', 'tracking', 'playbook', 'settings'];
       for (let i = 0; i < order.length; i++) {
         if (canSee(perms[i])) {
           // converter pipeline → kanban (view ID)
@@ -512,6 +514,7 @@
       contacts: 'Contatos',
       tasks: 'Tarefas',
       tracking: 'Traqueamento',
+      playbook: 'Playbook',
       settings: 'Configurações'
     };
     $('topbar-title').textContent = titles[name] || name;
@@ -523,6 +526,7 @@
     if (name === 'contacts')  renderContacts();
     if (name === 'tasks')     renderTasks();
     if (name === 'tracking')  renderTracking();
+    if (name === 'playbook')  renderPlaybook();
     if (name === 'settings')  renderSettings();
     if (name === 'chat')      renderChat();
   }
@@ -1425,6 +1429,28 @@
     closeAllModals();
     renderTasks();
     toast('Tarefa excluída', 'success');
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // PLAYBOOK
+  // ═══════════════════════════════════════════════════════════════════
+  function renderPlaybook() {
+    const tabs = window.PLAYBOOK_CONTENT || [];
+    const tabsEl = $('playbook-tabs');
+    const contentEl = $('playbook-content');
+    if (!tabsEl || !contentEl) return;
+    if (!tabs.length) {
+      contentEl.innerHTML = '<div class="empty-state"><div class="empty-state-text">Playbook indisponível.</div></div>';
+      return;
+    }
+    if (!tabs.find(t => t.id === state.playbookTab)) state.playbookTab = tabs[0].id;
+    tabsEl.innerHTML = tabs.map(t =>
+      `<button class="playbook-tab ${t.id === state.playbookTab ? 'active' : ''}" data-ptab="${t.id}">${escapeHtml(t.label)}</button>`
+    ).join('');
+    const active = tabs.find(t => t.id === state.playbookTab) || tabs[0];
+    // Conteúdo é estático e confiável (definido em playbook.js) — innerHTML é seguro aqui
+    contentEl.innerHTML = active.html;
+    contentEl.scrollTop = 0;
   }
 
   function renderSettings() {
@@ -2447,6 +2473,15 @@
       if (del) { deleteTask(del.dataset.taskDel); return; }
       const open = e.target.closest('[data-task-open]');
       if (open) { openTaskModal(open.dataset.taskOpen); return; }
+    });
+
+    // Playbook — troca de abas
+    $('playbook-tabs').addEventListener('click', e => {
+      const btn = e.target.closest('[data-ptab]');
+      if (!btn) return;
+      state.playbookTab = btn.dataset.ptab;
+      renderPlaybook();
+      btn.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
     });
 
     // ESC fecha modais

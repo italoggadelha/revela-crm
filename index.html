@@ -90,6 +90,9 @@
     <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
     </symbol>
+    <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+    </symbol>
   </defs>
 </svg>
 </head>
@@ -158,6 +161,10 @@
       <button class="nav-item" data-view="tracking" data-perm="tracking">
         <span class="nav-icon"><svg><use href="#i-tracking"/></svg></span>
         <span class="nav-label">Traqueamento</span>
+      </button>
+      <button class="nav-item" data-view="playbook" data-perm="playbook">
+        <span class="nav-icon"><svg><use href="#i-book"/></svg></span>
+        <span class="nav-label">Playbook</span>
       </button>
       <button class="nav-item" data-view="settings" id="nav-settings">
         <span class="nav-icon"><svg><use href="#i-settings"/></svg></span>
@@ -463,6 +470,14 @@
           </div>
           <div class="chart-wrap"><canvas id="chart-revenue"></canvas></div>
         </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ VIEW: PLAYBOOK ═══════════ -->
+    <section class="view" data-view="playbook">
+      <div class="playbook">
+        <div class="playbook-tabs" id="playbook-tabs"></div>
+        <div class="playbook-content" id="playbook-content"></div>
       </div>
     </section>
 
@@ -820,6 +835,7 @@
           <label class="perm-check"><input type="checkbox" data-perm="contacts" checked><span>Contatos</span></label>
           <label class="perm-check"><input type="checkbox" data-perm="tasks" checked><span>Tarefas</span></label>
           <label class="perm-check"><input type="checkbox" data-perm="tracking" checked><span>Traqueamento</span></label>
+          <label class="perm-check"><input type="checkbox" data-perm="playbook" checked><span>Playbook</span></label>
           <label class="perm-check"><input type="checkbox" data-perm="settings"><span>Configurações</span></label>
         </div>
       </div>
@@ -916,6 +932,7 @@
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="./config.js"></script>
+<script src="./playbook.js"></script>
 <script src="./app.js"></script>
 
 </body>
