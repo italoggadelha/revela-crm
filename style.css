@@ -2984,3 +2984,89 @@ a { color: inherit; text-decoration: none; }
   flex-shrink: 0; font-size: 12px; font-weight: 600; color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   REPAGINAÇÃO VISUAL — cores pastéis, degradês e ícones coloridos
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Fundos com leve degradê */
+.main { background: linear-gradient(180deg, #FBFAFF 0%, #FAFAF7 45%, #FFF8FB 100%); }
+.sidebar { background: linear-gradient(180deg, #FFFFFF 0%, #FBF7FF 100%); }
+.topbar { background: linear-gradient(180deg, #FFFFFF 0%, #FDFBFF 100%); }
+
+/* ── Menu lateral: ícones em chips coloridos ── */
+.nav-icon {
+  width: 30px; height: 30px;
+  border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--ni-bg, var(--surface-2));
+  color: var(--ni-fg, var(--text-muted));
+  transition: background 0.15s var(--ease), color 0.15s var(--ease), transform 0.15s var(--ease);
+}
+.nav-icon svg { width: 16px; height: 16px; }
+.nav-item:hover .nav-icon { transform: scale(1.08); }
+
+.nav-item[data-view="dashboard"]  { --ni-bg:#E0E7FF; --ni-fg:#6366F1; }
+.nav-item[data-view="kanban"]     { --ni-bg:#DCFCE7; --ni-fg:#16A34A; }
+.nav-item[data-view="chat"]       { --ni-bg:#FFEDD5; --ni-fg:#EA580C; }
+.nav-item[data-view="contacts"]   { --ni-bg:#FCE7F3; --ni-fg:#DB2777; }
+.nav-item[data-view="tasks"]      { --ni-bg:#CCFBF1; --ni-fg:#0D9488; }
+.nav-item[data-view="agenda"]     { --ni-bg:#DBEAFE; --ni-fg:#2563EB; }
+.nav-item[data-view="automacoes"] { --ni-bg:#FEF9C3; --ni-fg:#CA8A04; }
+.nav-item[data-view="tracking"]   { --ni-bg:#F3E8FF; --ni-fg:#9333EA; }
+.nav-item[data-view="playbook"]   { --ni-bg:#FFE4E6; --ni-fg:#E11D48; }
+.nav-item[data-view="settings"]   { --ni-bg:#E2E8F0; --ni-fg:#475569; }
+
+/* Item ativo: degradê suave na cor do item + ícone preenchido */
+.nav-item.active {
+  background: linear-gradient(90deg, var(--ni-bg, var(--accent-bg)) 0%, transparent 95%);
+  color: var(--ni-fg, var(--accent));
+}
+.nav-item.active::before { background: var(--ni-fg, var(--accent)); }
+.nav-item.active .nav-icon { background: var(--ni-fg); color: #fff; }
+.nav-item.active .nav-badge { background: var(--ni-fg); color: #fff; }
+
+/* ── Botões primários com degradê ── */
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent-hover) 0%, var(--accent) 100%);
+}
+.btn-primary:hover {
+  background: linear-gradient(135deg, var(--accent) 0%, #0B5E57 100%);
+}
+.login-btn {
+  background: linear-gradient(135deg, var(--accent-hover) 0%, var(--accent) 100%);
+}
+
+/* ── Cards de métrica: fundo pastel em degradê ── */
+.metric-card {
+  background: linear-gradient(160deg,
+    color-mix(in srgb, var(--metric-color, var(--accent)) 12%, white) 0%,
+    var(--surface) 72%);
+}
+.metric-icon {
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--metric-color, var(--accent)) 24%, white) 0%,
+    color-mix(in srgb, var(--metric-color, var(--accent)) 11%, white) 100%);
+}
+
+/* ── Mini-dashboard de tarefas: chips coloridos ── */
+.task-stat:nth-child(2) .task-stat-icon { background: #DBEAFE; color: #2563EB; }
+.task-stat:nth-child(3) .task-stat-icon { background: #DCFCE7; color: #16A34A; }
+.task-stat:nth-child(4) .task-stat-icon { background: #F3E8FF; color: #9333EA; }
+
+/* ── Planilha de contatos: cabeçalho e hover com cor ── */
+.contacts-table thead {
+  background: linear-gradient(180deg, #F0FDFA 0%, #EAF6F4 100%);
+}
+.contacts-table th { color: var(--accent); }
+.contacts-table tbody tr:hover { background: #F0FDFA; }
+
+/* ── Cabeçalho das colunas do kanban: leve degradê na cor da etapa ── */
+.column-head {
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--col-color, var(--pipe-default)) 18%, white) 0%,
+    transparent 100%);
+}
+
+/* ── Cards de seção (settings, automações) com toque de cor ── */
+.settings-section { background: linear-gradient(170deg, #FCFCFE 0%, var(--surface) 60%); }
