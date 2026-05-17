@@ -38,6 +38,10 @@
     editingLead: null,
     sortables: [],
     charts: {},
+    // Tarefas
+    tasks: [],
+    editingTask: null,
+    taskFilter: 'pending',
     // Chat
     conversations: [],
     messages: {},                 // { conversationId: [msgs] }
@@ -124,9 +128,9 @@
   // ─── Permissões ───
   function defaultPerms(role) {
     if (role === 'admin') {
-      return { dashboard: true, pipeline: true, chat: true, contacts: true, tracking: true, settings: true };
+      return { dashboard: true, pipeline: true, chat: true, contacts: true, tasks: true, tracking: true, settings: true };
     }
-    return { dashboard: true, pipeline: true, chat: true, contacts: true, tracking: true, settings: false };
+    return { dashboard: true, pipeline: true, chat: true, contacts: true, tasks: true, tracking: true, settings: false };
   }
 
   function userPerms() {
@@ -287,7 +291,7 @@
     applyNavPermissions();
 
     // Load tudo
-    Promise.all([loadPipeline(), loadProfiles(), loadLeads(), loadConversations()]).then(() => {
+    Promise.all([loadPipeline(), loadProfiles(), loadLeads(), loadConversations(), loadTasks()]).then(() => {
       renderAll();
       subscribeRealtime();
       // Garante que a view atual é uma permitida
@@ -308,8 +312,8 @@
       const fallback = ['dashboard', 'pipeline', 'contacts', 'tracking', 'settings']
         .find(v => canSee(v === 'pipeline' ? 'pipeline' : v));
       // map de view name pra permission
-      const order = ['dashboard', 'pipeline', 'contacts', 'tracking', 'settings'];
-      const perms = ['dashboard', 'pipeline', 'contacts', 'tracking', 'settings'];
+      const order = ['dashboard', 'pipeline', 'contacts', 'tasks', 'tracking', 'settings'];
+      const perms = ['dashboard', 'pipeline', 'contacts', 'tasks', 'tracking', 'settings'];
       for (let i = 0; i < order.length; i++) {
         if (canSee(perms[i])) {
           // converter pipeline → kanban (view ID)
@@ -446,6 +450,11 @@
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pipeline_config' }, async () => {
         await loadPipeline(); renderAll();
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, async () => {
+        await loadTasks();
+        if (state.currentView === 'tasks') renderTasks();
+        else renderTaskDashboard();
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, async () => {
         await loadProfiles();
         if (state.currentView === 'settings') renderVendors();
@@ -501,6 +510,7 @@
       kanban: 'Pipeline',
       chat: 'Chat',
       contacts: 'Contatos',
+      tasks: 'Tarefas',
       tracking: 'Traqueamento',
       settings: 'Configurações'
     };
@@ -511,6 +521,7 @@
 
     if (name === 'dashboard') renderMetrics();
     if (name === 'contacts')  renderContacts();
+    if (name === 'tasks')     renderTasks();
     if (name === 'tracking')  renderTracking();
     if (name === 'settings')  renderSettings();
     if (name === 'chat')      renderChat();
@@ -585,6 +596,8 @@
     if (state.currentView === 'contacts') renderContacts();
     if (state.currentView === 'dashboard') renderMetrics();
     if (state.currentView === 'tracking') renderTracking();
+    if (state.currentView === 'tasks') renderTasks();
+    else renderTaskDashboard();
   }
 
   function renderStats() {
@@ -1223,6 +1236,197 @@
   }
 
   // ─── SETTINGS ───
+  // ═══════════════════════════════════════════════════════════════════
+  // TAREFAS
+  // ═══════════════════════════════════════════════════════════════════
+  async function loadTasks() {
+    const { data, error } = await supabase
+      .from('tasks').select('*').order('created_at', { ascending: false });
+    if (error) { console.warn('Tasks falhou', error); state.tasks = []; return; }
+    state.tasks = data || [];
+  }
+
+  // Data local no formato YYYY-MM-DD (igual ao tipo `date` do Postgres)
+  function todayISO() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+  function startOfTodayMs() { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); }
+  function startOfWeekMs() {
+    const d = new Date(); d.setHours(0, 0, 0, 0);
+    const offset = (d.getDay() + 6) % 7; // segunda = início da semana
+    d.setDate(d.getDate() - offset);
+    return d.getTime();
+  }
+  function startOfMonthMs() {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+  }
+  function formatTaskDate(iso) {
+    if (!iso) return '';
+    const today = todayISO();
+    if (iso === today) return 'Hoje';
+    const d = new Date(iso + 'T00:00:00');
+    const diff = Math.round((d.getTime() - new Date(today + 'T00:00:00').getTime()) / 86400000);
+    if (diff === 1) return 'Amanhã';
+    if (diff === -1) return 'Ontem';
+    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  }
+
+  function renderTaskDashboard() {
+    const today = todayISO();
+    const sod = startOfTodayMs(), sow = startOfWeekMs(), som = startOfMonthMs();
+    let dueToday = 0, doneDay = 0, doneWeek = 0, doneMonth = 0;
+    state.tasks.forEach(t => {
+      if (!t.done && t.due_date === today) dueToday++;
+      if (t.done && t.completed_at) {
+        const c = new Date(t.completed_at).getTime();
+        if (c >= sod) doneDay++;
+        if (c >= sow) doneWeek++;
+        if (c >= som) doneMonth++;
+      }
+    });
+    const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+    set('ts-due-today', dueToday);
+    set('ts-done-day', doneDay);
+    set('ts-done-week', doneWeek);
+    set('ts-done-month', doneMonth);
+    // Badge no menu lateral = tarefas que vencem hoje
+    const badge = $('nav-badge-tasks');
+    if (badge) {
+      if (dueToday > 0) { badge.textContent = dueToday; badge.style.display = ''; }
+      else badge.style.display = 'none';
+    }
+  }
+
+  function taskRowHTML(t) {
+    const today = todayISO();
+    const overdue = !t.done && t.due_date && t.due_date < today;
+    const dueToday = !t.done && t.due_date === today;
+    const dueLabel = formatTaskDate(t.due_date);
+    return `
+      <div class="task-row ${t.done ? 'done' : ''}" data-task-id="${t.id}">
+        <button class="task-check ${t.done ? 'checked' : ''}" data-task-toggle="${t.id}"
+                title="${t.done ? 'Reabrir tarefa' : 'Concluir tarefa'}">
+          <svg><use href="#i-check"/></svg>
+        </button>
+        <div class="task-row-main" data-task-open="${t.id}">
+          <div class="task-row-title">
+            ${t.priority === 'alta' ? '<span class="task-prio-dot" title="Prioridade alta"></span>' : ''}
+            ${escapeHtml(t.title)}
+          </div>
+          ${t.description ? `<div class="task-row-desc">${escapeHtml(t.description)}</div>` : ''}
+        </div>
+        ${dueLabel ? `<span class="task-due ${overdue ? 'overdue' : ''} ${dueToday ? 'today' : ''}">
+          <svg><use href="#i-calendar"/></svg>${dueLabel}</span>` : ''}
+        <button class="task-row-del" data-task-del="${t.id}" title="Excluir tarefa">
+          <svg><use href="#i-trash"/></svg>
+        </button>
+      </div>`;
+  }
+
+  function renderTasks() {
+    renderTaskDashboard();
+    const list = $('tasks-list');
+    if (!list) return;
+    const filter = state.taskFilter;
+    let tasks = state.tasks.slice();
+    if (filter === 'pending') tasks = tasks.filter(t => !t.done);
+    else if (filter === 'done') tasks = tasks.filter(t => t.done);
+
+    tasks.sort((a, b) => {
+      if (!!a.done !== !!b.done) return a.done ? 1 : -1;
+      if (!a.done) {
+        const ad = a.due_date || '9999-99-99', bd = b.due_date || '9999-99-99';
+        if (ad !== bd) return ad < bd ? -1 : 1;
+        return new Date(b.created_at) - new Date(a.created_at);
+      }
+      return new Date(b.completed_at || 0) - new Date(a.completed_at || 0);
+    });
+
+    if (!tasks.length) {
+      const msg = filter === 'done' ? 'Nenhuma tarefa concluída ainda.'
+        : filter === 'pending' ? 'Nenhuma tarefa pendente. Tudo em dia! 🎉'
+        : 'Nenhuma tarefa cadastrada.';
+      list.innerHTML = `<div class="empty-state"><div class="empty-state-text">${msg}</div></div>`;
+      return;
+    }
+    list.innerHTML = tasks.map(taskRowHTML).join('');
+  }
+
+  function openTaskModal(id) {
+    const t = id ? state.tasks.find(x => x.id === id) : null;
+    state.editingTask = t || null;
+    $('task-modal-title').textContent = t ? 'Editar tarefa' : 'Nova tarefa';
+    $('task-title').value = t ? (t.title || '') : '';
+    $('task-due').value = t ? (t.due_date || '') : '';
+    $('task-priority').value = t ? (t.priority || 'normal') : 'normal';
+    $('task-description').value = t ? (t.description || '') : '';
+    $('task-done').checked = t ? !!t.done : false;
+    $('task-delete').style.display = t ? '' : 'none';
+    $('task-modal-backdrop').classList.add('show');
+    setTimeout(() => $('task-title').focus(), 60);
+  }
+
+  async function saveTask() {
+    const title = $('task-title').value.trim();
+    if (!title) { toast('Dê um título à tarefa', 'error'); return; }
+    const done = $('task-done').checked;
+    const editing = state.editingTask;
+    const patch = {
+      title,
+      due_date: $('task-due').value || null,
+      priority: $('task-priority').value || 'normal',
+      description: $('task-description').value.trim() || null,
+      done,
+      completed_at: done
+        ? ((editing && editing.done && editing.completed_at) ? editing.completed_at : new Date().toISOString())
+        : null
+    };
+    const btn = $('task-save');
+    btn.disabled = true;
+    let error;
+    if (editing) {
+      ({ error } = await supabase.from('tasks').update(patch).eq('id', editing.id));
+    } else {
+      patch.vendedor_id = state.user.id;
+      ({ error } = await supabase.from('tasks').insert(patch));
+    }
+    btn.disabled = false;
+    if (error) { toast('Erro: ' + error.message, 'error'); return; }
+    await loadTasks();
+    renderTasks();
+    closeAllModals();
+    toast(editing ? 'Tarefa atualizada' : 'Tarefa criada', 'success');
+  }
+
+  async function toggleTaskDone(id) {
+    const t = state.tasks.find(x => x.id === id);
+    if (!t) return;
+    const done = !t.done;
+    const prev = { done: t.done, completed_at: t.completed_at };
+    t.done = done;
+    t.completed_at = done ? new Date().toISOString() : null;
+    renderTasks();
+    const { error } = await supabase.from('tasks')
+      .update({ done: t.done, completed_at: t.completed_at }).eq('id', id);
+    if (error) {
+      Object.assign(t, prev);
+      renderTasks();
+      toast('Erro: ' + error.message, 'error');
+    }
+  }
+
+  async function deleteTask(id) {
+    if (!confirm('Excluir esta tarefa permanentemente?')) return;
+    const { error } = await supabase.from('tasks').delete().eq('id', id);
+    if (error) { toast('Erro: ' + error.message, 'error'); return; }
+    state.tasks = state.tasks.filter(t => t.id !== id);
+    closeAllModals();
+    renderTasks();
+    toast('Tarefa excluída', 'success');
+  }
+
   function renderSettings() {
     // Meu perfil é sempre renderizado (todos têm acesso ao próprio perfil)
     renderProfileSection();
@@ -1963,8 +2167,10 @@
     $('edit-modal-backdrop').classList.remove('show');
     $('vendor-modal-backdrop').classList.remove('show');
     $('source-modal-backdrop').classList.remove('show');
+    $('task-modal-backdrop').classList.remove('show');
     state.currentLead = null;
     state.editingLead = null;
+    state.editingTask = null;
   }
 
   // Auto-save de notas
@@ -2209,6 +2415,38 @@
       btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Salvando';
       await savePipeline(newPipeline);
       btn.disabled = false; btn.innerHTML = '<svg><use href="#i-check"/></svg> Salvar';
+    });
+
+    // Tarefas
+    $('btn-add-task').addEventListener('click', () => openTaskModal(null));
+    $('task-modal-close').addEventListener('click', closeAllModals);
+    $('task-cancel').addEventListener('click', closeAllModals);
+    $('task-modal-backdrop').addEventListener('click', e => {
+      if (e.target === $('task-modal-backdrop')) closeAllModals();
+    });
+    $('task-save').addEventListener('click', saveTask);
+    $('task-delete').addEventListener('click', () => {
+      if (state.editingTask) deleteTask(state.editingTask.id);
+    });
+    $('task-title').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); saveTask(); }
+    });
+    // Filtro de tarefas (Pendentes / Concluídas / Todas)
+    $$('#tasks-filter .tasks-filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.taskFilter = btn.dataset.tfilter;
+        $$('#tasks-filter .tasks-filter-btn').forEach(b => b.classList.toggle('active', b === btn));
+        renderTasks();
+      });
+    });
+    // Delegação de cliques na lista de tarefas (linhas são re-renderizadas)
+    $('tasks-list').addEventListener('click', e => {
+      const toggle = e.target.closest('[data-task-toggle]');
+      if (toggle) { toggleTaskDone(toggle.dataset.taskToggle); return; }
+      const del = e.target.closest('[data-task-del]');
+      if (del) { deleteTask(del.dataset.taskDel); return; }
+      const open = e.target.closest('[data-task-open]');
+      if (open) { openTaskModal(open.dataset.taskOpen); return; }
     });
 
     // ESC fecha modais

@@ -81,6 +81,15 @@
     <symbol id="i-check-double" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <polyline points="2 12 7 17 13 11"/><polyline points="10 17 16 11"/><polyline points="14 12 19 17 22 12"/>
     </symbol>
+    <symbol id="i-task" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h11"/>
+    </symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+    </symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+    </symbol>
   </defs>
 </svg>
 </head>
@@ -140,6 +149,11 @@
         <span class="nav-icon"><svg><use href="#i-list"/></svg></span>
         <span class="nav-label">Contatos</span>
         <span class="nav-badge" id="nav-badge-contacts">0</span>
+      </button>
+      <button class="nav-item" data-view="tasks" data-perm="tasks">
+        <span class="nav-icon"><svg><use href="#i-task"/></svg></span>
+        <span class="nav-label">Tarefas</span>
+        <span class="nav-badge" id="nav-badge-tasks" style="display:none">0</span>
       </button>
       <button class="nav-item" data-view="tracking" data-perm="tracking">
         <span class="nav-icon"><svg><use href="#i-tracking"/></svg></span>
@@ -308,6 +322,55 @@
           </thead>
           <tbody id="contacts-tbody"></tbody>
         </table>
+      </div>
+    </section>
+
+    <!-- ═══════════ VIEW: TAREFAS ═══════════ -->
+    <section class="view" data-view="tasks">
+      <div class="tasks">
+        <div class="tasks-dash">
+          <div class="task-stat task-stat-due">
+            <div class="task-stat-icon"><svg><use href="#i-clock"/></svg></div>
+            <div>
+              <div class="task-stat-value" id="ts-due-today">0</div>
+              <div class="task-stat-label">Vencem hoje</div>
+            </div>
+          </div>
+          <div class="task-stat">
+            <div class="task-stat-icon"><svg><use href="#i-check"/></svg></div>
+            <div>
+              <div class="task-stat-value" id="ts-done-day">0</div>
+              <div class="task-stat-label">Concluídas hoje</div>
+            </div>
+          </div>
+          <div class="task-stat">
+            <div class="task-stat-icon"><svg><use href="#i-check"/></svg></div>
+            <div>
+              <div class="task-stat-value" id="ts-done-week">0</div>
+              <div class="task-stat-label">Concluídas na semana</div>
+            </div>
+          </div>
+          <div class="task-stat">
+            <div class="task-stat-icon"><svg><use href="#i-check"/></svg></div>
+            <div>
+              <div class="task-stat-value" id="ts-done-month">0</div>
+              <div class="task-stat-label">Concluídas no mês</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tasks-toolbar">
+          <div class="tasks-filter" id="tasks-filter">
+            <button class="tasks-filter-btn active" data-tfilter="pending">Pendentes</button>
+            <button class="tasks-filter-btn" data-tfilter="done">Concluídas</button>
+            <button class="tasks-filter-btn" data-tfilter="all">Todas</button>
+          </div>
+          <button class="btn-primary" id="btn-add-task">
+            <svg><use href="#i-plus"/></svg> Nova tarefa
+          </button>
+        </div>
+
+        <div class="tasks-list" id="tasks-list"></div>
       </div>
     </section>
 
@@ -755,6 +818,7 @@
           <label class="perm-check"><input type="checkbox" data-perm="dashboard" checked><span>Dashboard</span></label>
           <label class="perm-check"><input type="checkbox" data-perm="pipeline" checked><span>Pipeline</span></label>
           <label class="perm-check"><input type="checkbox" data-perm="contacts" checked><span>Contatos</span></label>
+          <label class="perm-check"><input type="checkbox" data-perm="tasks" checked><span>Tarefas</span></label>
           <label class="perm-check"><input type="checkbox" data-perm="tracking" checked><span>Traqueamento</span></label>
           <label class="perm-check"><input type="checkbox" data-perm="settings"><span>Configurações</span></label>
         </div>
@@ -763,6 +827,53 @@
     <div class="modal-actions">
       <button class="modal-btn" id="vendor-cancel">Cancelar</button>
       <button class="modal-btn modal-btn-primary" id="vendor-save"><svg><use href="#i-check"/></svg>Cadastrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- MODAL: Tarefa (criar / editar)                                  -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="task-modal-backdrop">
+  <div class="modal">
+    <header class="modal-head">
+      <div class="modal-identity">
+        <h2 class="modal-name" id="task-modal-title">Nova tarefa</h2>
+        <p class="modal-handle">Organize o que não pode esquecer</p>
+      </div>
+      <button class="modal-close" id="task-modal-close"><svg><use href="#i-x"/></svg></button>
+    </header>
+    <div class="modal-body">
+      <div class="field-block">
+        <label class="field-block-label">Título *</label>
+        <input type="text" class="input-text" id="task-title" placeholder="Ex: Ligar para a lead Maria">
+      </div>
+      <div class="profile-fields">
+        <div class="field-block">
+          <label class="field-block-label">Vence em</label>
+          <input type="date" class="input-text" id="task-due">
+        </div>
+        <div class="field-block">
+          <label class="field-block-label">Prioridade</label>
+          <select class="input-text" id="task-priority">
+            <option value="baixa">Baixa</option>
+            <option value="normal" selected>Normal</option>
+            <option value="alta">Alta</option>
+          </select>
+        </div>
+      </div>
+      <div class="field-block">
+        <label class="field-block-label">Informações / detalhes</label>
+        <textarea class="notes-textarea" id="task-description" placeholder="Contexto, links, próximos passos..."></textarea>
+      </div>
+      <label class="perm-check" style="width:auto;display:inline-flex">
+        <input type="checkbox" id="task-done"><span>Marcar como concluída</span>
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-btn modal-btn-danger" id="task-delete" style="display:none"><svg><use href="#i-trash"/></svg>Excluir</button>
+      <button class="modal-btn" id="task-cancel">Cancelar</button>
+      <button class="modal-btn modal-btn-primary" id="task-save"><svg><use href="#i-check"/></svg>Salvar</button>
     </div>
   </div>
 </div>
