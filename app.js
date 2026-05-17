@@ -2047,22 +2047,27 @@
     if (!name || !email || !password) { toast('Preencha nome, email e senha', 'error'); return; }
     if (password.length < 6) { toast('Senha precisa de no mínimo 6 caracteres', 'error'); return; }
 
-    // Cria o usuário via signUp (público) — funciona porque a confirmação de email está OFF
-    const { data, error } = await supabase.auth.signUp({
-      email, password,
-      options: { data: { name, role } }
-    });
-    if (error) {
-      toast('Erro: ' + error.message, 'error');
+    // Cria o usuário via Edge Function (server-side, com service_role).
+    // NÃO usa supabase.auth.signUp no cliente: isso trocaria a sessão do admin
+    // pela do novo usuário e dependia da falha de escalação de privilégio para
+    // definir o `role`. A função create-vendor faz tudo no servidor.
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(CONFIG.SUPABASE_URL + '/functions/v1/create-vendor', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': CONFIG.SUPABASE_ANON_KEY,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ name, email, password, phone, role, permissions })
+      });
+      const result = await res.json();
+      if (!res.ok || result.error) throw new Error(result.error || ('HTTP ' + res.status));
+    } catch (err) {
+      toast('Erro: ' + err.message, 'error');
       return;
     }
-    if (!data.user) { toast('Falha ao criar usuário', 'error'); return; }
-
-    // Atualiza profile criado pelo trigger com nome, telefone, role e permissions
-    const { error: profileErr } = await supabase.from('profiles')
-      .update({ nome: name, telefone: phone, role, permissions })
-      .eq('id', data.user.id);
-    if (profileErr) console.warn('Erro ao atualizar profile:', profileErr);
 
     await loadProfiles();
     renderVendors();
