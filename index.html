@@ -158,6 +158,11 @@
         <span class="nav-label">Tarefas</span>
         <span class="nav-badge" id="nav-badge-tasks" style="display:none">0</span>
       </button>
+      <button class="nav-item" data-view="agenda" data-perm="agenda">
+        <span class="nav-icon"><svg><use href="#i-calendar"/></svg></span>
+        <span class="nav-label">Agenda</span>
+        <span class="nav-badge" id="nav-badge-agenda" style="display:none">0</span>
+      </button>
       <button class="nav-item" data-view="tracking" data-perm="tracking">
         <span class="nav-icon"><svg><use href="#i-tracking"/></svg></span>
         <span class="nav-label">Traqueamento</span>
@@ -469,6 +474,35 @@
             </div>
           </div>
           <div class="chart-wrap"><canvas id="chart-revenue"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ VIEW: AGENDA ═══════════ -->
+    <section class="view" data-view="agenda">
+      <div class="agenda">
+        <header class="agenda-head">
+          <div class="agenda-nav">
+            <button class="agenda-navbtn" id="agenda-prev" title="Mês anterior">‹</button>
+            <span class="agenda-month" id="agenda-month-label">—</span>
+            <button class="agenda-navbtn" id="agenda-next" title="Próximo mês">›</button>
+            <button class="btn-ghost" id="agenda-today">Hoje</button>
+          </div>
+          <div class="agenda-actions">
+            <span id="agenda-google"></span>
+            <button class="btn-primary" id="btn-add-appt">
+              <svg><use href="#i-plus"/></svg> Nova reunião
+            </button>
+          </div>
+        </header>
+        <div class="agenda-body">
+          <div class="agenda-cal">
+            <div class="cal-grid" id="agenda-grid"></div>
+          </div>
+          <aside class="agenda-side">
+            <div class="agenda-day-label" id="agenda-day-label">—</div>
+            <div class="agenda-day-list" id="agenda-day-list"></div>
+          </aside>
         </div>
       </div>
     </section>
@@ -899,6 +933,7 @@
           <label class="perm-check"><input type="checkbox" data-perm="pipeline" checked><span>Pipeline</span></label>
           <label class="perm-check"><input type="checkbox" data-perm="contacts" checked><span>Contatos</span></label>
           <label class="perm-check"><input type="checkbox" data-perm="tasks" checked><span>Tarefas</span></label>
+          <label class="perm-check"><input type="checkbox" data-perm="agenda" checked><span>Agenda</span></label>
           <label class="perm-check"><input type="checkbox" data-perm="tracking" checked><span>Traqueamento</span></label>
           <label class="perm-check"><input type="checkbox" data-perm="playbook" checked><span>Playbook</span></label>
           <label class="perm-check"><input type="checkbox" data-perm="settings"><span>Configurações</span></label>
@@ -955,6 +990,59 @@
       <button class="modal-btn modal-btn-danger" id="task-delete" style="display:none"><svg><use href="#i-trash"/></svg>Excluir</button>
       <button class="modal-btn" id="task-cancel">Cancelar</button>
       <button class="modal-btn modal-btn-primary" id="task-save"><svg><use href="#i-check"/></svg>Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- MODAL: Reunião / compromisso da agenda                          -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="appt-modal-backdrop">
+  <div class="modal">
+    <header class="modal-head">
+      <div class="modal-identity">
+        <h2 class="modal-name" id="appt-modal-title">Nova reunião</h2>
+        <p class="modal-handle">Agende e sincronize com o Google Calendar</p>
+      </div>
+      <button class="modal-close" id="appt-modal-close"><svg><use href="#i-x"/></svg></button>
+    </header>
+    <div class="modal-body">
+      <div class="field-block">
+        <label class="field-block-label">Título *</label>
+        <input type="text" class="input-text" id="appt-title" placeholder="Ex: Call de diagnóstico — Maria">
+      </div>
+      <div class="appt-time-grid">
+        <div class="field-block">
+          <label class="field-block-label">Data</label>
+          <input type="date" class="input-text" id="appt-date">
+        </div>
+        <div class="field-block">
+          <label class="field-block-label">Início</label>
+          <input type="time" class="input-text" id="appt-start">
+        </div>
+        <div class="field-block">
+          <label class="field-block-label">Fim</label>
+          <input type="time" class="input-text" id="appt-end">
+        </div>
+      </div>
+      <div class="field-block">
+        <label class="field-block-label">Lead vinculado</label>
+        <select class="input-text" id="appt-lead"></select>
+        <div class="field-hint">Ao vincular um lead, ele é movido para "reunião agendada" no pipeline.</div>
+      </div>
+      <div class="field-block">
+        <label class="field-block-label">Local / link da call</label>
+        <input type="text" class="input-text" id="appt-location" placeholder="Google Meet, endereço, telefone...">
+      </div>
+      <div class="field-block">
+        <label class="field-block-label">Observações</label>
+        <textarea class="notes-textarea" id="appt-notes" placeholder="Pauta, contexto, próximos passos..."></textarea>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-btn modal-btn-danger" id="appt-delete" style="display:none"><svg><use href="#i-trash"/></svg>Excluir</button>
+      <button class="modal-btn" id="appt-cancel">Cancelar</button>
+      <button class="modal-btn modal-btn-primary" id="appt-save"><svg><use href="#i-check"/></svg>Salvar</button>
     </div>
   </div>
 </div>

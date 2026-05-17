@@ -46,6 +46,12 @@
     playbookTab: '',
     // Configurações
     settingsSection: 'profile',
+    // Agenda
+    appointments: [],
+    editingAppointment: null,
+    agendaMonth: null,
+    agendaSelectedDay: null,
+    googleStatus: { connected: false, email: null },
     // Chat
     conversations: [],
     messages: {},                 // { conversationId: [msgs] }
@@ -132,9 +138,9 @@
   // ─── Permissões ───
   function defaultPerms(role) {
     if (role === 'admin') {
-      return { dashboard: true, pipeline: true, chat: true, contacts: true, tasks: true, tracking: true, playbook: true, settings: true };
+      return { dashboard: true, pipeline: true, chat: true, contacts: true, tasks: true, agenda: true, tracking: true, playbook: true, settings: true };
     }
-    return { dashboard: true, pipeline: true, chat: true, contacts: true, tasks: true, tracking: true, playbook: true, settings: false };
+    return { dashboard: true, pipeline: true, chat: true, contacts: true, tasks: true, agenda: true, tracking: true, playbook: true, settings: false };
   }
 
   function userPerms() {
@@ -295,11 +301,14 @@
     applyNavPermissions();
 
     // Load tudo
-    Promise.all([loadPipeline(), loadProfiles(), loadLeads(), loadConversations(), loadTasks()]).then(() => {
+    Promise.all([loadPipeline(), loadProfiles(), loadLeads(), loadConversations(), loadTasks(), loadAppointments()]).then(() => {
       renderAll();
       subscribeRealtime();
       // Garante que a view atual é uma permitida
       ensureValidView();
+      // Conexão Google: trata retorno do OAuth e atualiza status
+      handleGoogleOAuthReturn();
+      refreshGoogleStatus();
     });
   }
 
@@ -316,8 +325,8 @@
       const fallback = ['dashboard', 'pipeline', 'contacts', 'tracking', 'settings']
         .find(v => canSee(v === 'pipeline' ? 'pipeline' : v));
       // map de view name pra permission
-      const order = ['dashboard', 'pipeline', 'contacts', 'tasks', 'tracking', 'playbook', 'settings'];
-      const perms = ['dashboard', 'pipeline', 'contacts', 'tasks', 'tracking', 'playbook', 'settings'];
+      const order = ['dashboard', 'pipeline', 'contacts', 'tasks', 'agenda', 'tracking', 'playbook', 'settings'];
+      const perms = ['dashboard', 'pipeline', 'contacts', 'tasks', 'agenda', 'tracking', 'playbook', 'settings'];
       for (let i = 0; i < order.length; i++) {
         if (canSee(perms[i])) {
           // converter pipeline → kanban (view ID)
@@ -459,6 +468,10 @@
         if (state.currentView === 'tasks') renderTasks();
         else renderTaskDashboard();
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, async () => {
+        await loadAppointments();
+        if (state.currentView === 'agenda') renderAgenda();
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, async () => {
         await loadProfiles();
         if (state.currentView === 'settings') renderVendors();
@@ -515,6 +528,7 @@
       chat: 'Chat',
       contacts: 'Contatos',
       tasks: 'Tarefas',
+      agenda: 'Agenda',
       tracking: 'Traqueamento',
       playbook: 'Playbook',
       settings: 'Configurações'
@@ -527,6 +541,7 @@
     if (name === 'dashboard') renderMetrics();
     if (name === 'contacts')  renderContacts();
     if (name === 'tasks')     renderTasks();
+    if (name === 'agenda')    renderAgenda();
     if (name === 'tracking')  renderTracking();
     if (name === 'playbook')  renderPlaybook();
     if (name === 'settings')  renderSettings();
@@ -1434,6 +1449,302 @@
   }
 
   // ═══════════════════════════════════════════════════════════════════
+  // AGENDA
+  // ═══════════════════════════════════════════════════════════════════
+  const AG_MONTHS = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  const AG_WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+  function pad2(n) { return String(n).padStart(2, '0'); }
+  function ymd(d) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+  function hm(iso) { const d = new Date(iso); return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`; }
+
+  async function loadAppointments() {
+    const { data, error } = await supabase
+      .from('appointments').select('*').order('starts_at', { ascending: true });
+    if (error) { console.warn('Appointments falhou', error); state.appointments = []; return; }
+    state.appointments = data || [];
+  }
+
+  function ensureAgendaState() {
+    if (!state.agendaMonth) {
+      const t = new Date();
+      state.agendaMonth = new Date(t.getFullYear(), t.getMonth(), 1);
+    }
+    if (!state.agendaSelectedDay) state.agendaSelectedDay = ymd(new Date());
+  }
+
+  // ─── Integração Google (via Edge Function) ───
+  async function callGoogleFn(payload) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch(CONFIG.SUPABASE_URL + '/functions/v1/google-calendar', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'apikey': CONFIG.SUPABASE_ANON_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+    return res.json();
+  }
+
+  async function refreshGoogleStatus() {
+    try {
+      const r = await callGoogleFn({ action: 'status' });
+      state.googleStatus = { connected: !!r.connected, email: r.email || null };
+    } catch (_) {
+      state.googleStatus = { connected: false, email: null };
+    }
+    if (state.currentView === 'agenda') renderAgendaHeader();
+  }
+
+  async function connectGoogle() {
+    const stateTok = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    sessionStorage.setItem('g_oauth_state', stateTok);
+    try {
+      const r = await callGoogleFn({ action: 'oauth-url', redirect_uri: location.origin, state: stateTok });
+      if (r.url) window.location.href = r.url;
+      else toast(r.error || 'Erro ao iniciar conexão Google', 'error');
+    } catch (e) {
+      toast('Erro ao conectar: ' + e.message, 'error');
+    }
+  }
+
+  async function disconnectGoogle() {
+    if (!confirm('Desconectar a conta Google? A Agenda continua funcionando, sem sincronizar.')) return;
+    await callGoogleFn({ action: 'disconnect' });
+    await refreshGoogleStatus();
+    toast('Conta Google desconectada', 'success');
+  }
+
+  // Trata o retorno do OAuth (?code=... na URL após o consentimento Google)
+  async function handleGoogleOAuthReturn() {
+    const params = new URLSearchParams(location.search);
+    const code = params.get('code');
+    if (!code) return;
+    const returnedState = params.get('state');
+    const saved = sessionStorage.getItem('g_oauth_state');
+    history.replaceState({}, document.title, location.pathname);  // limpa a URL
+    if (!saved || saved !== returnedState) {
+      toast('Falha de verificação na conexão Google. Tente de novo.', 'error');
+      return;
+    }
+    sessionStorage.removeItem('g_oauth_state');
+    try {
+      const r = await callGoogleFn({ action: 'oauth-callback', code, redirect_uri: location.origin });
+      if (r.ok) {
+        toast('Conta Google conectada: ' + (r.email || ''), 'success');
+        await refreshGoogleStatus();
+      } else {
+        toast(r.error || 'Falha ao conectar Google', 'error');
+      }
+    } catch (e) {
+      toast('Erro ao conectar Google: ' + e.message, 'error');
+    }
+  }
+
+  // Sincroniza um compromisso com o Google Calendar (best-effort)
+  async function syncAppointmentToGoogle(op, appt) {
+    if (!state.googleStatus.connected && op !== 'delete') return;
+    try {
+      const r = await callGoogleFn({ action: 'sync-event', op, appointment: appt });
+      if (r && r.google_event_id && r.google_event_id !== appt.google_event_id) {
+        await supabase.from('appointments')
+          .update({ google_event_id: r.google_event_id }).eq('id', appt.id);
+        const local = state.appointments.find(a => a.id === appt.id);
+        if (local) local.google_event_id = r.google_event_id;
+      }
+    } catch (e) {
+      console.warn('Sync Google falhou:', e);
+    }
+  }
+
+  // Move o lead para a etapa "reunião agendada" do pipeline
+  function moveLeadToScheduled(leadId) {
+    const stage = state.pipeline.find(s => s.id === 'agendou')
+      || state.pipeline.find(s => /agend|reuni/i.test(s.label || ''));
+    if (!stage) return;
+    const lead = state.leads.find(l => l.id === leadId);
+    if (!lead || lead.pipeline_status === stage.id) return;
+    updateLead(leadId, { pipeline_status: stage.id });
+    toast(`Lead movido para "${stage.label}"`, 'success');
+  }
+
+  // ─── Render ───
+  function renderAgenda() {
+    ensureAgendaState();
+    renderAgendaHeader();
+    renderAgendaGrid();
+    renderAgendaDay();
+  }
+
+  function renderAgendaHeader() {
+    ensureAgendaState();
+    const m = state.agendaMonth;
+    const label = $('agenda-month-label');
+    if (label) label.textContent = AG_MONTHS[m.getMonth()] + ' ' + m.getFullYear();
+
+    const gEl = $('agenda-google');
+    if (!gEl) return;
+    const gs = state.googleStatus;
+    if (gs.connected) {
+      gEl.innerHTML = `<span class="agenda-gstatus on" title="${escapeHtml(gs.email || '')}">
+          <span class="agenda-gdot"></span>Google conectado</span>
+        <button class="btn-ghost" id="agenda-google-disconnect">Desconectar</button>`;
+    } else {
+      gEl.innerHTML = `<button class="btn-ghost" id="agenda-google-connect">
+        <svg><use href="#i-calendar"/></svg> Conectar Google</button>`;
+    }
+    const c = $('agenda-google-connect'); if (c) c.onclick = connectGoogle;
+    const d = $('agenda-google-disconnect'); if (d) d.onclick = disconnectGoogle;
+  }
+
+  function renderAgendaGrid() {
+    const grid = $('agenda-grid');
+    if (!grid) return;
+    const m = state.agendaMonth;
+    const first = new Date(m.getFullYear(), m.getMonth(), 1);
+    const gridStart = new Date(first);
+    gridStart.setDate(1 - first.getDay());  // recua até o domingo
+    const todayStr = ymd(new Date());
+
+    // Agrupa compromissos por dia
+    const byDay = {};
+    state.appointments.forEach(a => {
+      const k = ymd(new Date(a.starts_at));
+      (byDay[k] = byDay[k] || []).push(a);
+    });
+
+    let html = AG_WEEKDAYS.map(w => `<div class="cal-wd">${w}</div>`).join('');
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(gridStart);
+      d.setDate(gridStart.getDate() + i);
+      const k = ymd(d);
+      const other = d.getMonth() !== m.getMonth();
+      const appts = (byDay[k] || []).slice().sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at));
+      const chips = appts.slice(0, 3).map(a =>
+        `<div class="cal-chip" data-appt="${a.id}"><b>${hm(a.starts_at)}</b> ${escapeHtml(a.title)}</div>`
+      ).join('');
+      const more = appts.length > 3 ? `<div class="cal-more">+${appts.length - 3} mais</div>` : '';
+      html += `<div class="cal-day${other ? ' other' : ''}${k === todayStr ? ' today' : ''}${k === state.agendaSelectedDay ? ' selected' : ''}" data-day="${k}">
+        <div class="cal-daynum">${d.getDate()}</div>${chips}${more}</div>`;
+    }
+    grid.innerHTML = html;
+  }
+
+  function renderAgendaDay() {
+    const day = state.agendaSelectedDay;
+    const d = new Date(day + 'T00:00:00');
+    const label = $('agenda-day-label');
+    if (label) {
+      label.textContent = d.toLocaleDateString('pt-BR',
+        { weekday: 'long', day: '2-digit', month: 'long' });
+    }
+    const list = $('agenda-day-list');
+    if (!list) return;
+    const appts = state.appointments
+      .filter(a => ymd(new Date(a.starts_at)) === day)
+      .sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at));
+    if (!appts.length) {
+      list.innerHTML = `<div class="empty-state"><div class="empty-state-text">
+        Nenhuma reunião neste dia.</div></div>`;
+      return;
+    }
+    list.innerHTML = appts.map(a => {
+      const lead = a.lead_id ? state.leads.find(l => l.id === a.lead_id) : null;
+      return `<div class="appt-row" data-appt="${a.id}">
+        <div class="appt-time"><b>${hm(a.starts_at)}</b><span>${hm(a.ends_at)}</span></div>
+        <div class="appt-main">
+          <div class="appt-title">${escapeHtml(a.title)}</div>
+          ${lead ? `<div class="appt-meta">👤 ${escapeHtml(lead.nome || 'Lead')}</div>` : ''}
+          ${a.location ? `<div class="appt-meta">📍 ${escapeHtml(a.location)}</div>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // ─── CRUD ───
+  function openAppointmentModal(id, presetDay) {
+    const a = id ? state.appointments.find(x => x.id === id) : null;
+    state.editingAppointment = a || null;
+    $('appt-modal-title').textContent = a ? 'Editar reunião' : 'Nova reunião';
+    $('appt-title').value = a ? a.title : '';
+    $('appt-date').value = a ? ymd(new Date(a.starts_at)) : (presetDay || state.agendaSelectedDay || ymd(new Date()));
+    $('appt-start').value = a ? hm(a.starts_at) : '09:00';
+    $('appt-end').value = a ? hm(a.ends_at) : '10:00';
+    $('appt-location').value = a ? (a.location || '') : '';
+    $('appt-notes').value = a ? (a.notes || '') : '';
+
+    const sel = $('appt-lead');
+    sel.innerHTML = '<option value="">— Nenhum lead —</option>' +
+      state.leads.map(l =>
+        `<option value="${l.id}">${escapeHtml((l.nome || 'Lead') + (l.telefone ? ' · ' + l.telefone : ''))}</option>`
+      ).join('');
+    sel.value = a ? (a.lead_id || '') : '';
+
+    $('appt-delete').style.display = a ? '' : 'none';
+    $('appt-modal-backdrop').classList.add('show');
+    setTimeout(() => $('appt-title').focus(), 60);
+  }
+
+  async function saveAppointment() {
+    const title = $('appt-title').value.trim();
+    const date = $('appt-date').value;
+    const start = $('appt-start').value;
+    const end = $('appt-end').value;
+    if (!title) { toast('Dê um título à reunião', 'error'); return; }
+    if (!date || !start || !end) { toast('Preencha data e horários', 'error'); return; }
+    const starts_at = new Date(`${date}T${start}`).toISOString();
+    const ends_at = new Date(`${date}T${end}`).toISOString();
+    if (new Date(ends_at) <= new Date(starts_at)) {
+      toast('O horário de fim deve ser depois do início', 'error'); return;
+    }
+    const leadId = $('appt-lead').value || null;
+    const editing = state.editingAppointment;
+    const patch = {
+      title, starts_at, ends_at, lead_id: leadId,
+      location: $('appt-location').value.trim() || null,
+      notes: $('appt-notes').value.trim() || null
+    };
+    const btn = $('appt-save');
+    btn.disabled = true;
+    let saved, error;
+    if (editing) {
+      ({ data: saved, error } = await supabase.from('appointments')
+        .update(patch).eq('id', editing.id).select().single());
+    } else {
+      patch.vendedor_id = state.user.id;
+      ({ data: saved, error } = await supabase.from('appointments')
+        .insert(patch).select().single());
+    }
+    btn.disabled = false;
+    if (error) { toast('Erro: ' + error.message, 'error'); return; }
+
+    syncAppointmentToGoogle(editing ? 'update' : 'create', { ...saved });
+    if (leadId) moveLeadToScheduled(leadId);
+
+    await loadAppointments();
+    state.agendaSelectedDay = ymd(new Date(starts_at));
+    renderAgenda();
+    closeAllModals();
+    toast(editing ? 'Reunião atualizada' : 'Reunião agendada', 'success');
+  }
+
+  async function deleteAppointment(id) {
+    const a = state.appointments.find(x => x.id === id);
+    if (!a) return;
+    if (!confirm('Excluir esta reunião permanentemente?')) return;
+    const { error } = await supabase.from('appointments').delete().eq('id', id);
+    if (error) { toast('Erro: ' + error.message, 'error'); return; }
+    if (a.google_event_id) syncAppointmentToGoogle('delete', { ...a });
+    state.appointments = state.appointments.filter(x => x.id !== id);
+    closeAllModals();
+    renderAgenda();
+    toast('Reunião excluída', 'success');
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
   // PLAYBOOK
   // ═══════════════════════════════════════════════════════════════════
   function renderPlaybook() {
@@ -2279,9 +2590,11 @@
     $('vendor-modal-backdrop').classList.remove('show');
     $('source-modal-backdrop').classList.remove('show');
     $('task-modal-backdrop').classList.remove('show');
+    $('appt-modal-backdrop').classList.remove('show');
     state.currentLead = null;
     state.editingLead = null;
     state.editingTask = null;
+    state.editingAppointment = null;
   }
 
   // Auto-save de notas
@@ -2565,6 +2878,45 @@
       if (del) { deleteTask(del.dataset.taskDel); return; }
       const open = e.target.closest('[data-task-open]');
       if (open) { openTaskModal(open.dataset.taskOpen); return; }
+    });
+
+    // Agenda
+    $('agenda-prev').addEventListener('click', () => {
+      const m = state.agendaMonth;
+      state.agendaMonth = new Date(m.getFullYear(), m.getMonth() - 1, 1);
+      renderAgenda();
+    });
+    $('agenda-next').addEventListener('click', () => {
+      const m = state.agendaMonth;
+      state.agendaMonth = new Date(m.getFullYear(), m.getMonth() + 1, 1);
+      renderAgenda();
+    });
+    $('agenda-today').addEventListener('click', () => {
+      const t = new Date();
+      state.agendaMonth = new Date(t.getFullYear(), t.getMonth(), 1);
+      state.agendaSelectedDay = ymd(t);
+      renderAgenda();
+    });
+    $('btn-add-appt').addEventListener('click', () => openAppointmentModal(null));
+    $('agenda-grid').addEventListener('click', e => {
+      const chip = e.target.closest('[data-appt]');
+      if (chip) { openAppointmentModal(chip.dataset.appt); return; }
+      const day = e.target.closest('[data-day]');
+      if (day) { state.agendaSelectedDay = day.dataset.day; renderAgenda(); }
+    });
+    $('agenda-day-list').addEventListener('click', e => {
+      const row = e.target.closest('[data-appt]');
+      if (row) openAppointmentModal(row.dataset.appt);
+    });
+    // Modal de reunião
+    $('appt-modal-close').addEventListener('click', closeAllModals);
+    $('appt-cancel').addEventListener('click', closeAllModals);
+    $('appt-modal-backdrop').addEventListener('click', e => {
+      if (e.target === $('appt-modal-backdrop')) closeAllModals();
+    });
+    $('appt-save').addEventListener('click', saveAppointment);
+    $('appt-delete').addEventListener('click', () => {
+      if (state.editingAppointment) deleteAppointment(state.editingAppointment.id);
     });
 
     // Playbook — troca de abas
