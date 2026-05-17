@@ -3070,3 +3070,117 @@ a { color: inherit; text-decoration: none; }
 
 /* ── Cards de seção (settings, automações) com toque de cor ── */
 .settings-section { background: linear-gradient(170deg, #FCFCFE 0%, var(--surface) 60%); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   PLAYBOOK — layout estilo dashboard
+   ═══════════════════════════════════════════════════════════════════ */
+.playbook { flex-direction: row; }
+
+/* Navegação lateral */
+.playbook-nav {
+  flex-shrink: 0;
+  width: 250px;
+  background: linear-gradient(180deg, #FFFFFF 0%, #FBF7FF 100%);
+  border-right: 1px solid var(--border);
+  padding: 16px 12px;
+  overflow-y: auto;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.playbook-nav-head {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-faded);
+  padding: 4px 10px 10px;
+}
+.playbook-nav-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.playbook-tab {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  border: none; background: transparent; cursor: pointer;
+  padding: 8px 10px; border-radius: var(--radius-md);
+  font-size: 13px; font-weight: 600; color: var(--text-muted);
+  text-align: left;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+.playbook-tab-ic {
+  width: 32px; height: 32px; flex-shrink: 0; border-radius: 9px;
+  background: var(--surface-2);
+  display: flex; align-items: center; justify-content: center; font-size: 16px;
+  transition: transform 0.15s var(--ease);
+}
+.playbook-tab-lb { flex: 1; }
+.playbook-tab-nb {
+  font-size: 10px; font-weight: 700; color: var(--text-faded);
+  background: var(--surface-2);
+  width: 19px; height: 19px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+}
+.playbook-tab:hover { background: var(--surface-2); color: var(--text); }
+.playbook-tab:hover .playbook-tab-ic { transform: scale(1.08); }
+.playbook-tab.active {
+  background: linear-gradient(135deg, #F0FDFA 0%, #FFFFFF 100%);
+  color: var(--accent);
+  box-shadow: var(--shadow-sm);
+}
+.playbook-tab.active .playbook-tab-nb { background: var(--accent); color: #fff; }
+
+/* Conteúdo */
+.playbook-content { padding: 0 0 48px; }
+.playbook-content > * { max-width: none; }
+
+.playbook-hero {
+  display: flex; align-items: center; gap: 18px;
+  padding: 30px 38px;
+  background: linear-gradient(120deg, #0F766E 0%, #0D9488 55%, #14B8A6 100%);
+  color: #fff;
+}
+.playbook-hero-ic {
+  width: 58px; height: 58px; flex-shrink: 0; border-radius: 16px;
+  background: rgba(255, 255, 255, 0.18);
+  display: flex; align-items: center; justify-content: center; font-size: 30px;
+}
+.playbook-hero-kicker {
+  font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.85;
+}
+.playbook-hero-title {
+  font-family: 'Lora', Georgia, serif;
+  font-size: 26px; font-weight: 700; margin-top: 3px;
+}
+.playbook-doc { padding: 26px 38px 0; }
+.playbook-doc > * { max-width: 800px; }
+
+/* Cards do conteúdo com mais cor */
+.pb-card {
+  background: linear-gradient(160deg, #F8FAFC 0%, var(--surface) 70%);
+  border-top: 3px solid var(--accent-border);
+}
+.pb-card h4 { color: var(--accent); }
+
+/* Chip de responsável nas tarefas */
+.task-resp {
+  display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0;
+  font-size: 11.5px; font-weight: 600; color: var(--text-muted);
+  background: var(--surface-2); border-radius: 20px; padding: 3px 10px 3px 3px;
+}
+.task-resp img { width: 19px; height: 19px; border-radius: 50%; object-fit: cover; }
+
+/* Polimento — cabeçalho dos modais com leve degradê */
+.modal-head {
+  background: linear-gradient(180deg, #FBF7FF 0%, var(--surface) 100%);
+}
+
+@media (max-width: 860px) {
+  .playbook { flex-direction: column; }
+  .playbook-nav {
+    width: auto; flex-direction: row; gap: 4px;
+    border-right: none; border-bottom: 1px solid var(--border);
+    overflow-x: auto; padding: 10px;
+  }
+  .playbook-nav-head { display: none; }
+  .playbook-tab { width: auto; flex-shrink: 0; }
+  .playbook-tab-lb, .playbook-tab-nb { display: none; }
+  .playbook-hero { padding: 20px; }
+  .playbook-hero-title { font-size: 20px; }
+  .playbook-doc { padding: 18px; }
+}

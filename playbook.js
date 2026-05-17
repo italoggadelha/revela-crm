@@ -8,6 +8,7 @@ window.PLAYBOOK_CONTENT = [
 
   {
     id: 'visao',
+    icon: '🎯',
     label: 'Visão geral',
     html: `
       <h3>O que a REVELA vende</h3>
@@ -59,6 +60,7 @@ window.PLAYBOOK_CONTENT = [
 
   {
     id: 'icp',
+    icon: '👥',
     label: 'Cliente ideal',
     html: `
       <h3>Para quem a gente vende</h3>
@@ -98,6 +100,7 @@ window.PLAYBOOK_CONTENT = [
 
   {
     id: 'mercado',
+    icon: '📊',
     label: 'O mercado',
     html: `
       <h3>O cenário da estética no Brasil</h3>
@@ -141,6 +144,7 @@ window.PLAYBOOK_CONTENT = [
 
   {
     id: 'diagnostico',
+    icon: '🔍',
     label: 'Diagnóstico',
     html: `
       <h3>A call de diagnóstico</h3>
@@ -186,6 +190,7 @@ window.PLAYBOOK_CONTENT = [
 
   {
     id: 'oferta',
+    icon: '💎',
     label: 'A oferta',
     html: `
       <h3>Apresentando a solução</h3>
@@ -237,6 +242,7 @@ window.PLAYBOOK_CONTENT = [
 
   {
     id: 'objecoes',
+    icon: '🛡️',
     label: 'Objeções',
     html: `
       <h3>Quebra de objeções</h3>
@@ -301,6 +307,7 @@ window.PLAYBOOK_CONTENT = [
 
   {
     id: 'rapport',
+    icon: '🤝',
     label: 'Rapport & autoridade',
     html: `
       <h3>Conexão e autoridade</h3>
@@ -339,6 +346,7 @@ window.PLAYBOOK_CONTENT = [
 
   {
     id: 'fechamento',
+    icon: '✍️',
     label: 'Fechamento',
     html: `
       <h3>Conduzindo o fechamento</h3>
@@ -382,6 +390,7 @@ window.PLAYBOOK_CONTENT = [
 
   {
     id: 'metricas',
+    icon: '📈',
     label: 'Métricas & metas',
     html: `
       <h3>Métricas que todo vendedor acompanha</h3>

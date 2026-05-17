@@ -1332,7 +1332,15 @@
     const today = todayISO();
     const overdue = !t.done && t.due_date && t.due_date < today;
     const dueToday = !t.done && t.due_date === today;
-    const dueLabel = formatTaskDate(t.due_date);
+    let dueLabel = formatTaskDate(t.due_date);
+    if (dueLabel && t.due_time) dueLabel += ' ' + String(t.due_time).slice(0, 5);
+    // Responsável: mostra o chip para o admin (que vê tarefas de todos)
+    const resp = isAdmin() ? profileById(t.vendedor_id) : null;
+    const respChip = resp
+      ? `<span class="task-resp" title="Responsável: ${escapeHtml(resp.nome || resp.email)}">
+           <img src="${profileAvatar(resp)}" alt="">
+           ${escapeHtml(firstName(resp.nome) || resp.email.split('@')[0])}</span>`
+      : '';
     return `
       <div class="task-row ${t.done ? 'done' : ''}" data-task-id="${t.id}">
         <button class="task-check ${t.done ? 'checked' : ''}" data-task-toggle="${t.id}"
@@ -1346,6 +1354,7 @@
           </div>
           ${t.description ? `<div class="task-row-desc">${escapeHtml(t.description)}</div>` : ''}
         </div>
+        ${respChip}
         ${dueLabel ? `<span class="task-due ${overdue ? 'overdue' : ''} ${dueToday ? 'today' : ''}">
           <svg><use href="#i-calendar"/></svg>${dueLabel}</span>` : ''}
         <button class="task-row-del" data-task-del="${t.id}" title="Excluir tarefa">
@@ -1389,9 +1398,17 @@
     $('task-modal-title').textContent = t ? 'Editar tarefa' : 'Nova tarefa';
     $('task-title').value = t ? (t.title || '') : '';
     $('task-due').value = t ? (t.due_date || '') : '';
+    $('task-time').value = t && t.due_time ? String(t.due_time).slice(0, 5) : '';
     $('task-priority').value = t ? (t.priority || 'normal') : 'normal';
     $('task-description').value = t ? (t.description || '') : '';
     $('task-done').checked = t ? !!t.done : false;
+    // Responsável — admin escolhe qualquer vendedor; vendedor fica travado em si
+    const adminUser = isAdmin();
+    const sel = $('task-assignee');
+    sel.innerHTML = state.profiles.map(p =>
+      `<option value="${p.id}">${escapeHtml(p.nome || p.email)}</option>`).join('');
+    sel.value = t ? t.vendedor_id : state.user.id;
+    sel.disabled = !adminUser;
     $('task-delete').style.display = t ? '' : 'none';
     $('task-modal-backdrop').classList.add('show');
     setTimeout(() => $('task-title').focus(), 60);
@@ -1405,12 +1422,14 @@
     const patch = {
       title,
       due_date: $('task-due').value || null,
+      due_time: $('task-time').value || null,
       priority: $('task-priority').value || 'normal',
       description: $('task-description').value.trim() || null,
       done,
       completed_at: done
         ? ((editing && editing.done && editing.completed_at) ? editing.completed_at : new Date().toISOString())
-        : null
+        : null,
+      vendedor_id: $('task-assignee').value || state.user.id
     };
     const btn = $('task-save');
     btn.disabled = true;
@@ -1418,7 +1437,6 @@
     if (editing) {
       ({ error } = await supabase.from('tasks').update(patch).eq('id', editing.id));
     } else {
-      patch.vendedor_id = state.user.id;
       ({ error } = await supabase.from('tasks').insert(patch));
     }
     btn.disabled = false;
@@ -1887,12 +1905,26 @@
       return;
     }
     if (!tabs.find(t => t.id === state.playbookTab)) state.playbookTab = tabs[0].id;
-    tabsEl.innerHTML = tabs.map(t =>
-      `<button class="playbook-tab ${t.id === state.playbookTab ? 'active' : ''}" data-ptab="${t.id}">${escapeHtml(t.label)}</button>`
-    ).join('');
+    tabsEl.innerHTML = '<div class="playbook-nav-head"><span class="playbook-nav-dot"></span>Playbook de Vendas</div>' +
+      tabs.map((t, i) =>
+        `<button class="playbook-tab ${t.id === state.playbookTab ? 'active' : ''}" data-ptab="${t.id}">
+           <span class="playbook-tab-ic">${t.icon || '📄'}</span>
+           <span class="playbook-tab-lb">${escapeHtml(t.label)}</span>
+           <span class="playbook-tab-nb">${i + 1}</span>
+         </button>`
+      ).join('');
     const active = tabs.find(t => t.id === state.playbookTab) || tabs[0];
+    const idx = tabs.findIndex(t => t.id === active.id);
     // Conteúdo é estático e confiável (definido em playbook.js) — innerHTML é seguro aqui
-    contentEl.innerHTML = active.html;
+    contentEl.innerHTML = `
+      <div class="playbook-hero">
+        <span class="playbook-hero-ic">${active.icon || '📄'}</span>
+        <div>
+          <div class="playbook-hero-kicker">Capítulo ${idx + 1} de ${tabs.length} · Playbook REVELA</div>
+          <h2 class="playbook-hero-title">${escapeHtml(active.label)}</h2>
+        </div>
+      </div>
+      <div class="playbook-doc">${active.html}</div>`;
     contentEl.scrollTop = 0;
   }
 
