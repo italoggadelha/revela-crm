@@ -52,6 +52,8 @@
     agendaMonth: null,
     agendaSelectedDay: null,
     googleStatus: { connected: false, email: null },
+    // Automações
+    scheduledMessages: [],
     // Chat
     conversations: [],
     messages: {},                 // { conversationId: [msgs] }
@@ -138,9 +140,9 @@
   // ─── Permissões ───
   function defaultPerms(role) {
     if (role === 'admin') {
-      return { dashboard: true, pipeline: true, chat: true, contacts: true, tasks: true, agenda: true, tracking: true, playbook: true, settings: true };
+      return { dashboard: true, pipeline: true, chat: true, contacts: true, tasks: true, agenda: true, automacoes: true, tracking: true, playbook: true, settings: true };
     }
-    return { dashboard: true, pipeline: true, chat: true, contacts: true, tasks: true, agenda: true, tracking: true, playbook: true, settings: false };
+    return { dashboard: true, pipeline: true, chat: true, contacts: true, tasks: true, agenda: true, automacoes: true, tracking: true, playbook: true, settings: false };
   }
 
   function userPerms() {
@@ -301,7 +303,7 @@
     applyNavPermissions();
 
     // Load tudo
-    Promise.all([loadPipeline(), loadProfiles(), loadLeads(), loadConversations(), loadTasks(), loadAppointments()]).then(() => {
+    Promise.all([loadPipeline(), loadProfiles(), loadLeads(), loadConversations(), loadTasks(), loadAppointments(), loadScheduledMessages()]).then(() => {
       renderAll();
       subscribeRealtime();
       // Garante que a view atual é uma permitida
@@ -325,8 +327,8 @@
       const fallback = ['dashboard', 'pipeline', 'contacts', 'tracking', 'settings']
         .find(v => canSee(v === 'pipeline' ? 'pipeline' : v));
       // map de view name pra permission
-      const order = ['dashboard', 'pipeline', 'contacts', 'tasks', 'agenda', 'tracking', 'playbook', 'settings'];
-      const perms = ['dashboard', 'pipeline', 'contacts', 'tasks', 'agenda', 'tracking', 'playbook', 'settings'];
+      const order = ['dashboard', 'pipeline', 'contacts', 'tasks', 'agenda', 'automacoes', 'tracking', 'playbook', 'settings'];
+      const perms = ['dashboard', 'pipeline', 'contacts', 'tasks', 'agenda', 'automacoes', 'tracking', 'playbook', 'settings'];
       for (let i = 0; i < order.length; i++) {
         if (canSee(perms[i])) {
           // converter pipeline → kanban (view ID)
@@ -472,6 +474,10 @@
         await loadAppointments();
         if (state.currentView === 'agenda') renderAgenda();
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'scheduled_messages' }, async () => {
+        await loadScheduledMessages();
+        if (state.currentView === 'automacoes') renderSchedMsgList();
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, async () => {
         await loadProfiles();
         if (state.currentView === 'settings') renderVendors();
@@ -529,6 +535,7 @@
       contacts: 'Contatos',
       tasks: 'Tarefas',
       agenda: 'Agenda',
+      automacoes: 'Automações',
       tracking: 'Traqueamento',
       playbook: 'Playbook',
       settings: 'Configurações'
@@ -538,12 +545,13 @@
     // Toolbar de filtros aparece em kanban e contacts
     $('toolbar').style.display = (name === 'kanban' || name === 'contacts') ? '' : 'none';
 
-    if (name === 'dashboard') renderMetrics();
-    if (name === 'contacts')  renderContacts();
-    if (name === 'tasks')     renderTasks();
-    if (name === 'agenda')    renderAgenda();
-    if (name === 'tracking')  renderTracking();
-    if (name === 'playbook')  renderPlaybook();
+    if (name === 'dashboard')  renderMetrics();
+    if (name === 'contacts')   renderContacts();
+    if (name === 'tasks')      renderTasks();
+    if (name === 'agenda')     renderAgenda();
+    if (name === 'automacoes') renderAutomacoes();
+    if (name === 'tracking')   renderTracking();
+    if (name === 'playbook')   renderPlaybook();
     if (name === 'settings')  renderSettings();
     if (name === 'chat')      renderChat();
   }
@@ -1745,6 +1753,128 @@
   }
 
   // ═══════════════════════════════════════════════════════════════════
+  // AUTOMAÇÕES
+  // ═══════════════════════════════════════════════════════════════════
+  async function loadScheduledMessages() {
+    const { data, error } = await supabase
+      .from('scheduled_messages').select('*').order('send_at', { ascending: true });
+    if (error) { console.warn('Scheduled messages falhou', error); state.scheduledMessages = []; return; }
+    state.scheduledMessages = data || [];
+  }
+
+  async function loadAutomationSettings() {
+    const { data } = await supabase.from('automation_settings').select('*').eq('id', 1).maybeSingle();
+    const c = data || {};
+    $('rem-1d-enabled').checked = !!c.remind_1d_enabled;
+    $('rem-1d-text').value = c.remind_1d_text || '';
+    $('rem-1h-enabled').checked = !!c.remind_1h_enabled;
+    $('rem-1h-text').value = c.remind_1h_text || '';
+  }
+
+  async function saveReminders() {
+    const btn = $('btn-save-reminders');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Salvando';
+    const patch = {
+      remind_1d_enabled: $('rem-1d-enabled').checked,
+      remind_1d_text: $('rem-1d-text').value.trim() || null,
+      remind_1h_enabled: $('rem-1h-enabled').checked,
+      remind_1h_text: $('rem-1h-text').value.trim() || null,
+      updated_at: new Date().toISOString(),
+      updated_by: state.user.id
+    };
+    const { error } = await supabase.from('automation_settings').update(patch).eq('id', 1);
+    btn.disabled = false;
+    btn.innerHTML = '<svg><use href="#i-check"/></svg> Salvar';
+    if (error) toast('Erro: ' + error.message, 'error');
+    else toast('Lembretes salvos', 'success');
+  }
+
+  function fmtSchedWhen(iso) {
+    const d = new Date(iso);
+    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' + hm(iso);
+  }
+
+  function renderSchedMsgList() {
+    const list = $('schedmsg-list');
+    if (!list) return;
+    const msgs = state.scheduledMessages.slice()
+      .sort((a, b) => new Date(a.send_at) - new Date(b.send_at));
+    if (!msgs.length) {
+      list.innerHTML = `<div class="empty-state"><div class="empty-state-text">
+        Nenhuma mensagem agendada.</div></div>`;
+      return;
+    }
+    const stLabel = { pending: 'Pendente', sent: 'Enviada', failed: 'Falhou', canceled: 'Cancelada' };
+    list.innerHTML = msgs.map(m => {
+      const lead = m.lead_id ? state.leads.find(l => l.id === m.lead_id) : null;
+      return `<div class="schedmsg-row">
+        <span class="schedmsg-st schedmsg-st-${m.status}">${stLabel[m.status] || m.status}</span>
+        <div class="schedmsg-main">
+          <div class="schedmsg-lead">${escapeHtml(lead ? (lead.nome || 'Lead') : '(lead removido)')}</div>
+          <div class="schedmsg-body">${escapeHtml(m.body)}</div>
+          ${m.error ? `<div class="schedmsg-err">⚠ ${escapeHtml(m.error)}</div>` : ''}
+        </div>
+        <span class="schedmsg-when">${fmtSchedWhen(m.send_at)}</span>
+        ${m.status === 'pending'
+          ? `<button class="task-row-del" data-schedmsg-del="${m.id}" title="Cancelar"><svg><use href="#i-trash"/></svg></button>`
+          : ''}
+      </div>`;
+    }).join('');
+  }
+
+  function renderAutomacoes() {
+    const adminUser = isAdmin();
+    $('auto-reminders').style.display = adminUser ? '' : 'none';
+    if (adminUser) loadAutomationSettings();
+    renderSchedMsgList();
+  }
+
+  function openSchedMsgModal() {
+    const sel = $('schedmsg-lead');
+    sel.innerHTML = '<option value="">— Selecione um lead —</option>' +
+      state.leads.map(l =>
+        `<option value="${l.id}">${escapeHtml((l.nome || 'Lead') + (l.telefone ? ' · ' + l.telefone : ''))}</option>`
+      ).join('');
+    sel.value = '';
+    $('schedmsg-date').value = ymd(new Date());
+    $('schedmsg-time').value = '09:00';
+    $('schedmsg-body').value = '';
+    $('schedmsg-modal-backdrop').classList.add('show');
+  }
+
+  async function saveSchedMsg() {
+    const leadId = $('schedmsg-lead').value;
+    const date = $('schedmsg-date').value;
+    const time = $('schedmsg-time').value;
+    const body = $('schedmsg-body').value.trim();
+    if (!leadId) { toast('Selecione um lead', 'error'); return; }
+    if (!date || !time) { toast('Preencha data e hora', 'error'); return; }
+    if (!body) { toast('Escreva a mensagem', 'error'); return; }
+    const send_at = new Date(`${date}T${time}`).toISOString();
+    const btn = $('schedmsg-save');
+    btn.disabled = true;
+    const { error } = await supabase.from('scheduled_messages').insert({
+      vendedor_id: state.user.id, lead_id: leadId, body, send_at
+    });
+    btn.disabled = false;
+    if (error) { toast('Erro: ' + error.message, 'error'); return; }
+    await loadScheduledMessages();
+    renderSchedMsgList();
+    closeAllModals();
+    toast('Mensagem agendada', 'success');
+  }
+
+  async function deleteSchedMsg(id) {
+    if (!confirm('Cancelar esta mensagem agendada?')) return;
+    const { error } = await supabase.from('scheduled_messages').delete().eq('id', id);
+    if (error) { toast('Erro: ' + error.message, 'error'); return; }
+    state.scheduledMessages = state.scheduledMessages.filter(m => m.id !== id);
+    renderSchedMsgList();
+    toast('Mensagem cancelada', 'success');
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
   // PLAYBOOK
   // ═══════════════════════════════════════════════════════════════════
   function renderPlaybook() {
@@ -2591,6 +2721,7 @@
     $('source-modal-backdrop').classList.remove('show');
     $('task-modal-backdrop').classList.remove('show');
     $('appt-modal-backdrop').classList.remove('show');
+    $('schedmsg-modal-backdrop').classList.remove('show');
     state.currentLead = null;
     state.editingLead = null;
     state.editingTask = null;
@@ -2917,6 +3048,20 @@
     $('appt-save').addEventListener('click', saveAppointment);
     $('appt-delete').addEventListener('click', () => {
       if (state.editingAppointment) deleteAppointment(state.editingAppointment.id);
+    });
+
+    // Automações
+    $('btn-save-reminders').addEventListener('click', saveReminders);
+    $('btn-add-schedmsg').addEventListener('click', openSchedMsgModal);
+    $('schedmsg-modal-close').addEventListener('click', closeAllModals);
+    $('schedmsg-cancel').addEventListener('click', closeAllModals);
+    $('schedmsg-modal-backdrop').addEventListener('click', e => {
+      if (e.target === $('schedmsg-modal-backdrop')) closeAllModals();
+    });
+    $('schedmsg-save').addEventListener('click', saveSchedMsg);
+    $('schedmsg-list').addEventListener('click', e => {
+      const del = e.target.closest('[data-schedmsg-del]');
+      if (del) deleteSchedMsg(del.dataset.schedmsgDel);
     });
 
     // Playbook — troca de abas

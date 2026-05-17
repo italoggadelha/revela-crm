@@ -93,6 +93,9 @@
     <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
     </symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+    </symbol>
   </defs>
 </svg>
 </head>
@@ -162,6 +165,10 @@
         <span class="nav-icon"><svg><use href="#i-calendar"/></svg></span>
         <span class="nav-label">Agenda</span>
         <span class="nav-badge" id="nav-badge-agenda" style="display:none">0</span>
+      </button>
+      <button class="nav-item" data-view="automacoes" data-perm="automacoes">
+        <span class="nav-icon"><svg><use href="#i-bolt"/></svg></span>
+        <span class="nav-label">Automações</span>
       </button>
       <button class="nav-item" data-view="tracking" data-perm="tracking">
         <span class="nav-icon"><svg><use href="#i-tracking"/></svg></span>
@@ -503,6 +510,61 @@
             <div class="agenda-day-label" id="agenda-day-label">—</div>
             <div class="agenda-day-list" id="agenda-day-list"></div>
           </aside>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ VIEW: AUTOMAÇÕES ═══════════ -->
+    <section class="view" data-view="automacoes">
+      <div class="settings">
+        <div class="settings-body">
+
+          <!-- Lembretes de reunião (admin) -->
+          <div class="settings-section" id="auto-reminders">
+            <div class="settings-section-head">
+              <div>
+                <div class="settings-title">Lembretes de reunião</div>
+                <div class="settings-desc">
+                  Envia um lembrete automático no WhatsApp do lead antes da reunião agendada.
+                  Use <code>{nome}</code>, <code>{data}</code> e <code>{hora}</code> no texto.
+                </div>
+              </div>
+              <button class="btn-primary" id="btn-save-reminders">
+                <svg><use href="#i-check"/></svg> Salvar
+              </button>
+            </div>
+            <label class="perm-check" style="display:inline-flex;width:auto;margin-bottom:6px">
+              <input type="checkbox" id="rem-1d-enabled">
+              <span>Lembrar <strong>1 dia</strong> antes da call</span>
+            </label>
+            <div class="field-block">
+              <textarea class="notes-textarea" id="rem-1d-text" rows="2"></textarea>
+            </div>
+            <label class="perm-check" style="display:inline-flex;width:auto;margin:14px 0 6px">
+              <input type="checkbox" id="rem-1h-enabled">
+              <span>Lembrar <strong>1 hora</strong> antes da call</span>
+            </label>
+            <div class="field-block">
+              <textarea class="notes-textarea" id="rem-1h-text" rows="2"></textarea>
+            </div>
+          </div>
+
+          <!-- Mensagens agendadas -->
+          <div class="settings-section" id="auto-scheduled">
+            <div class="settings-section-head">
+              <div>
+                <div class="settings-title">Mensagens agendadas</div>
+                <div class="settings-desc">
+                  Programe uma mensagem de WhatsApp para um lead em data e hora específicas.
+                </div>
+              </div>
+              <button class="btn-primary" id="btn-add-schedmsg">
+                <svg><use href="#i-plus"/></svg> Agendar mensagem
+              </button>
+            </div>
+            <div class="schedmsg-list" id="schedmsg-list"></div>
+          </div>
+
         </div>
       </div>
     </section>
@@ -934,6 +996,7 @@
           <label class="perm-check"><input type="checkbox" data-perm="contacts" checked><span>Contatos</span></label>
           <label class="perm-check"><input type="checkbox" data-perm="tasks" checked><span>Tarefas</span></label>
           <label class="perm-check"><input type="checkbox" data-perm="agenda" checked><span>Agenda</span></label>
+          <label class="perm-check"><input type="checkbox" data-perm="automacoes" checked><span>Automações</span></label>
           <label class="perm-check"><input type="checkbox" data-perm="tracking" checked><span>Traqueamento</span></label>
           <label class="perm-check"><input type="checkbox" data-perm="playbook" checked><span>Playbook</span></label>
           <label class="perm-check"><input type="checkbox" data-perm="settings"><span>Configurações</span></label>
@@ -1043,6 +1106,45 @@
       <button class="modal-btn modal-btn-danger" id="appt-delete" style="display:none"><svg><use href="#i-trash"/></svg>Excluir</button>
       <button class="modal-btn" id="appt-cancel">Cancelar</button>
       <button class="modal-btn modal-btn-primary" id="appt-save"><svg><use href="#i-check"/></svg>Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- MODAL: Agendar mensagem                                         -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="schedmsg-modal-backdrop">
+  <div class="modal">
+    <header class="modal-head">
+      <div class="modal-identity">
+        <h2 class="modal-name">Agendar mensagem</h2>
+        <p class="modal-handle">A mensagem será enviada no WhatsApp do lead na hora marcada</p>
+      </div>
+      <button class="modal-close" id="schedmsg-modal-close"><svg><use href="#i-x"/></svg></button>
+    </header>
+    <div class="modal-body">
+      <div class="field-block">
+        <label class="field-block-label">Lead *</label>
+        <select class="input-text" id="schedmsg-lead"></select>
+      </div>
+      <div class="appt-time-grid" style="grid-template-columns:1fr 1fr">
+        <div class="field-block">
+          <label class="field-block-label">Data</label>
+          <input type="date" class="input-text" id="schedmsg-date">
+        </div>
+        <div class="field-block">
+          <label class="field-block-label">Hora</label>
+          <input type="time" class="input-text" id="schedmsg-time">
+        </div>
+      </div>
+      <div class="field-block">
+        <label class="field-block-label">Mensagem *</label>
+        <textarea class="notes-textarea" id="schedmsg-body" placeholder="Escreva a mensagem que será enviada..."></textarea>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-btn" id="schedmsg-cancel">Cancelar</button>
+      <button class="modal-btn modal-btn-primary" id="schedmsg-save"><svg><use href="#i-check"/></svg>Agendar</button>
     </div>
   </div>
 </div>
