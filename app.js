@@ -865,6 +865,9 @@
           <a class="card-btn ig" href="${instagramLink(handle)}" target="_blank" onclick="event.stopPropagation()" title="Instagram">
             <svg><use href="#i-ig"/></svg>
           </a>
+          <button class="card-btn report" data-report-id="${lead.id}" title="Ver relatório" type="button">
+            <svg><use href="#i-report"/></svg>
+          </button>
           <span class="card-time">${relativeTime(lead.created_at)}</span>
         </div>
       </div>
@@ -900,6 +903,15 @@
       c.addEventListener('click', e => {
         if (e.target.closest('a') || e.target.closest('button')) return;
         openLeadModal(c.dataset.leadId);
+      });
+    });
+
+    // Botão de relatório no card
+    $$('[data-report-id]').forEach(b => {
+      b.addEventListener('click', e => {
+        e.stopPropagation();
+        const lead = state.leads.find(l => l.id === b.dataset.reportId);
+        if (lead) openReportModal(lead);
       });
     });
 
@@ -3297,6 +3309,64 @@
   }
 
   // ─── Relatório do lead (dentro do CRM) ───
+  // Análise do lead — gerada a partir dos dados do diagnóstico (vários parágrafos)
+  function buildLeadAnalysis(lead) {
+    const inf = scoreInfo(lead);
+    const nome = firstName(lead.nome) || 'O lead';
+    const tops = topsToList(lead);
+    const paras = [];
+    paras.push(`Com lead score de <strong>${inf.score}/100</strong>, ${escapeHtml(nome)} é classificado como <strong>${inf.label}</strong>. ` +
+      (inf.score >= 65 ? 'É um lead de boa qualidade — vale priorizar o contato e preparar uma abordagem consultiva.'
+        : inf.score >= 45 ? 'É um lead intermediário — exige nutrição e uma boa condução antes de oferecer.'
+          : 'É um lead de baixa prioridade neste momento — invista menos energia até ele amadurecer.'));
+    if (lead.faturamento) {
+      const low = /Até R\$ 5/.test(lead.faturamento), high = /Acima/.test(lead.faturamento);
+      paras.push(`Faturamento declarado: <strong>${escapeHtml(lead.faturamento)}</strong>. ` +
+        (low ? 'Orçamento mais restrito — ancore muito bem o valor e foque no retorno (ROI).'
+          : high ? 'Tem bom poder de investimento — explore um pacote mais completo.'
+            : 'Está na faixa ideal de investimento para a oferta.'));
+    }
+    if (lead.momento || lead.nota_geral != null) {
+      let t = `Momento do diagnóstico: <strong>${escapeHtml(lead.momento || '—')}</strong>`;
+      if (lead.nota_geral != null) {
+        const n = Number(lead.nota_geral);
+        t += `, com nota geral ${n.toFixed(2).replace('.', ',')}/5` +
+          (n < 3.5 ? ' — há clareza da dor, momento favorável para abordar.'
+            : ' — perfil mais maduro; ajuste o discurso para um nível mais avançado.');
+      }
+      paras.push(t + '.');
+    }
+    if (tops.length) {
+      paras.push('Os pontos mais críticos apontados foram: <strong>' +
+        tops.map(escapeHtml).join('</strong>, <strong>') + '</strong>. ' +
+        'Conduza a conversa de diagnóstico por essas dores — são as portas de entrada da venda.');
+    }
+    paras.push('<strong>Próximo passo sugerido:</strong> ' +
+      (inf.score >= 65 ? 'agendar uma call de diagnóstico o quanto antes e preparar uma proposta personalizada.'
+        : inf.score >= 45 ? 'nutrir o lead com conteúdo de valor e fazer um follow-up consultivo antes de oferecer.'
+          : 'manter no radar com follow-ups leves; repriorizar se o cenário do lead mudar.'));
+    return paras;
+  }
+
+  // Respostas detalhadas do diagnóstico (q1a..q4c) — só se houver dados
+  function reportDiagnostic(lead) {
+    const blocks = [['q1a', 'q1b', 'q1c'], ['q2a', 'q2b', 'q2c'], ['q3a', 'q3b', 'q3c'], ['q4a', 'q4b', 'q4c']];
+    const hasAny = blocks.some(b => b.some(k => lead[k] != null));
+    if (!hasAny) return '';
+    const rows = blocks.map((b, bi) => b.map((k, qi) => {
+      const v = lead[k];
+      return `<div class="report-q">
+        <span class="report-q-lb">Bloco ${bi + 1}.${qi + 1}</span>
+        <span class="report-q-bar"><span style="width:${v != null ? (v / 5 * 100) : 0}%"></span></span>
+        <span class="report-q-val">${v != null ? v + '/5' : '—'}</span>
+      </div>`;
+    }).join('')).join('');
+    return `<div class="report-section">
+      <h4>Respostas do diagnóstico</h4>
+      <div class="report-qgrid">${rows}</div>
+    </div>`;
+  }
+
   function openReportModal(lead) {
     if (!lead) return;
     $('report-modal-sub').textContent =
@@ -3327,8 +3397,8 @@
           ${scoreGauge(lead)}
         </div>
         <div class="report-section">
-          <h4>Leitura do lead</h4>
-          <p>${escapeHtml(buildLeadSummary(lead))}</p>
+          <h4>Análise do lead</h4>
+          ${buildLeadAnalysis(lead).map(p => `<p>${p}</p>`).join('')}
         </div>
         <div class="report-section">
           <h4>3 pontos mais críticos</h4>
@@ -3337,6 +3407,7 @@
                 `<div class="report-top"><span>0${i + 1}</span>${escapeHtml(t)}</div>`).join('') + '</div>'
             : '<p style="color:var(--text-faded)">Sem pontos críticos identificados.</p>'}
         </div>
+        ${reportDiagnostic(lead)}
         <div class="report-section">
           <h4>Origem</h4>
           <p>${escapeHtml(origem)}</p>

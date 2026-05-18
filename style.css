@@ -3679,3 +3679,18 @@ a { color: inherit; text-decoration: none; }
   width: 44px; text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums;
 }
 .score-bar-val i { font-style: normal; color: var(--text-faded); font-weight: 500; }
+
+/* ── Onda D: botão de relatório no card + respostas do diagnóstico ── */
+.card-btn.report { background: #E0E7FF; color: #4338CA; }
+.card-btn.report:hover { background: #C7D2FE; color: #3730A3; transform: translateY(-1px); }
+
+.report-qgrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 18px; }
+.report-q { display: flex; align-items: center; gap: 8px; }
+.report-q-lb { font-size: 11px; color: var(--text-muted); width: 68px; flex-shrink: 0; }
+.report-q-bar { flex: 1; height: 6px; background: var(--surface-3); border-radius: 3px; overflow: hidden; }
+.report-q-bar > span { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.report-q-val {
+  font-size: 11px; font-weight: 700; color: var(--text);
+  width: 34px; text-align: right; flex-shrink: 0;
+}
+@media (max-width: 600px) { .report-qgrid { grid-template-columns: 1fr; } }
