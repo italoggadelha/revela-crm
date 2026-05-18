@@ -1058,12 +1058,12 @@
           label: 'Leads',
           data,
           fill: true,
-          backgroundColor: 'rgba(15, 118, 110, 0.08)',
-          borderColor: '#0F766E',
+          backgroundColor: 'rgba(197, 240, 60, 0.10)',
+          borderColor: '#C5F03C',
           borderWidth: 2,
           pointRadius: 0,
           pointHoverRadius: 5,
-          pointBackgroundColor: '#0F766E',
+          pointBackgroundColor: '#C5F03C',
           tension: 0.3
         }]
       },
@@ -1071,8 +1071,8 @@
         responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: false }, tooltip: { displayColors: false } },
         scales: {
-          x: { grid: { display: false }, ticks: { maxTicksLimit: 8, color: '#9CA3AF', font: { size: 10 } } },
-          y: { beginAtZero: true, grid: { color: '#E8E6E1' }, ticks: { stepSize: 1, color: '#9CA3AF', font: { size: 10 } } }
+          x: { grid: { display: false }, ticks: { maxTicksLimit: 8, color: '#9A9A99', font: { size: 10 } } },
+          y: { beginAtZero: true, grid: { color: '#2C2C30' }, ticks: { stepSize: 1, color: '#9A9A99', font: { size: 10 } } }
         }
       }
     });
@@ -1097,7 +1097,7 @@
         labels: buckets.map(b => b.replace('R$ ', '').replace(' mil/mês', 'k').replace('Até ', '<')),
         datasets: [{
           data,
-          backgroundColor: '#0F766E',
+          backgroundColor: '#C5F03C',
           borderRadius: 6,
           borderSkipped: false,
           maxBarThickness: 60
@@ -1107,8 +1107,8 @@
         responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: false }, tooltip: { displayColors: false } },
         scales: {
-          x: { grid: { display: false }, ticks: { color: '#6B6B68', font: { size: 11 } } },
-          y: { beginAtZero: true, grid: { color: '#E8E6E1' }, ticks: { stepSize: 1, color: '#9CA3AF', font: { size: 10 } } }
+          x: { grid: { display: false }, ticks: { color: '#9A9A99', font: { size: 11 } } },
+          y: { beginAtZero: true, grid: { color: '#2C2C30' }, ticks: { stepSize: 1, color: '#9A9A99', font: { size: 10 } } }
         }
       }
     });

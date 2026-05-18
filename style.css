@@ -3,48 +3,49 @@
    ═══════════════════════════════════════════════════════════════════ */
 
 :root {
-  /* Surfaces */
-  --bg:           #FAFAF7;
-  --surface:      #FFFFFF;
-  --surface-2:    #F5F5F2;
-  --surface-3:    #EDECE6;
-  --overlay:      rgba(26, 26, 24, 0.4);
+  /* Surfaces — tema escuro */
+  --bg:           #0E0E0F;
+  --surface:      #1A1A1C;
+  --surface-2:    #242427;
+  --surface-3:    #2F2F33;
+  --overlay:      rgba(0, 0, 0, 0.66);
 
   /* Borders */
-  --border:        #E8E6E1;
-  --border-strong: #D4D4D0;
-  --border-focus:  #0F766E;
+  --border:        #2C2C30;
+  --border-strong: #3D3D42;
+  --border-focus:  #C5F03C;
 
   /* Text */
-  --text:         #1A1A18;
-  --text-soft:    #3F3F3C;
-  --text-muted:   #6B6B68;
-  --text-faded:   #9CA3AF;
+  --text:         #F4F4F2;
+  --text-soft:    #C9C9C6;
+  --text-muted:   #9A9A99;
+  --text-faded:   #6A6A6E;
 
-  /* Accents */
-  --accent:        #0F766E;
-  --accent-hover:  #0D9488;
-  --accent-bg:     #F0FDFA;
-  --accent-border: #99F6E4;
+  /* Accents — verde-limão */
+  --accent:        #C5F03C;
+  --accent-hover:  #B4E22A;
+  --accent-bg:     rgba(197, 240, 60, 0.13);
+  --accent-border: rgba(197, 240, 60, 0.38);
+  --on-accent:     #14180A;  /* texto sobre o accent (precisa ser escuro) */
 
   /* Status colors */
-  --danger:       #DC2626;
-  --danger-bg:    #FEF2F2;
-  --warn:         #D97706;
-  --warn-bg:      #FFFBEB;
-  --success:      #059669;
-  --success-bg:   #ECFDF5;
-  --info:         #2563EB;
-  --info-bg:      #EFF6FF;
+  --danger:       #F87171;
+  --danger-bg:    rgba(248, 113, 113, 0.15);
+  --warn:         #FBBF24;
+  --warn-bg:      rgba(251, 191, 36, 0.15);
+  --success:      #4ADE80;
+  --success-bg:   rgba(74, 222, 128, 0.15);
+  --info:         #60A5FA;
+  --info-bg:      rgba(96, 165, 250, 0.15);
 
   /* Pipeline (default, can be overridden per column) */
   --pipe-default: #94A3B8;
 
-  /* Shadows (subtle) */
-  --shadow-sm:  0 1px 2px rgba(26, 26, 24, 0.04);
-  --shadow:     0 1px 3px rgba(26, 26, 24, 0.06), 0 1px 2px rgba(26, 26, 24, 0.04);
-  --shadow-md:  0 4px 12px rgba(26, 26, 24, 0.08), 0 2px 4px rgba(26, 26, 24, 0.04);
-  --shadow-lg:  0 20px 40px rgba(26, 26, 24, 0.12), 0 8px 16px rgba(26, 26, 24, 0.06);
+  /* Shadows (escuras) */
+  --shadow-sm:  0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow:     0 1px 3px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md:  0 4px 14px rgba(0, 0, 0, 0.55), 0 2px 4px rgba(0, 0, 0, 0.4);
+  --shadow-lg:  0 20px 44px rgba(0, 0, 0, 0.66), 0 8px 16px rgba(0, 0, 0, 0.5);
 
   /* Radii */
   --radius-sm:  4px;
@@ -69,6 +70,7 @@
 html, body {
   background: var(--bg);
   color: var(--text);
+  color-scheme: dark;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: 14px;
   line-height: 1.5;
@@ -3561,3 +3563,64 @@ a { color: inherit; text-decoration: none; }
   .auto-list { width: auto; max-height: 190px; border-right: none; border-bottom: 1px solid var(--border); }
   .auto-config { padding: 14px; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   TEMA ESCURO — ajustes de contraste e remoção de fundos claros
+   ═══════════════════════════════════════════════════════════════════ */
+/* Texto/ícone sobre o accent verde-limão precisa ser escuro */
+.btn-primary, .login-btn { color: var(--on-accent); }
+.modal-btn-primary, .modal-btn-primary:hover { color: var(--on-accent); }
+.chat-filter-btn.active { color: var(--on-accent); }
+.task-check.checked { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.cal-day.today .cal-daynum { color: var(--on-accent); }
+.tasks-filter-btn.active { color: var(--accent); }
+
+/* Fundos: remove os degradês claros */
+.main { background: var(--bg); }
+.sidebar, .playbook-nav { background: #151517; }
+.topbar { background: var(--surface); }
+.modal-head { background: var(--surface-2); }
+.settings-section { background: var(--surface); }
+.contacts-table thead { background: var(--surface-2); }
+.contacts-table th { color: var(--text-muted); }
+.contacts-table tbody tr:hover { background: var(--surface-2); }
+.column-count { background: var(--surface-3); color: var(--text-soft); }
+.tracking-intro code, .wa-webhook-hint code { background: var(--surface-3); color: var(--text-soft); }
+.source-campaign-chip { background: var(--surface-3); }
+
+/* Menu lateral */
+.nav-icon { background: var(--surface-3); }
+.nav-item.active { background: var(--accent-bg); color: var(--accent); }
+.nav-item.active .nav-icon { background: var(--accent); color: var(--on-accent); }
+.nav-item.active::before { background: var(--accent); }
+.nav-item.active .nav-badge { background: var(--accent); color: var(--on-accent); }
+
+/* Cards de métrica */
+.metric-card { background: var(--surface); }
+.metric-icon { background: color-mix(in srgb, var(--metric-color, var(--accent)) 24%, var(--surface)); }
+
+/* Playbook */
+.playbook-hero { background: linear-gradient(120deg, #242818 0%, #1E2016 55%, var(--surface) 100%); }
+.playbook-hero-ic { background: rgba(197, 240, 60, 0.18); }
+.playbook-tab.active { background: var(--accent-bg); }
+.playbook-tab.active .playbook-tab-ic { background: var(--accent); }
+.playbook-tab.active .playbook-tab-nb { background: var(--accent); color: var(--on-accent); }
+.pb-card { background: var(--surface-2); }
+
+/* Relatório */
+.report-hd { background: linear-gradient(120deg, #242818, #1E2016 55%, var(--surface)); }
+.report-stat { background: var(--surface-2); }
+
+/* Tarefas / agenda / chat / automações / traqueamento */
+.task-stat { background: var(--surface); }
+.task-stat:nth-child(2) .task-stat-icon,
+.task-stat:nth-child(3) .task-stat-icon,
+.task-stat:nth-child(4) .task-stat-icon { background: var(--surface-3); }
+.summary-card { background: var(--surface-2); }
+.tracking-intro { background: var(--surface-2); }
+.source-card { background: var(--surface); }
+.leader-row.leader-top { background: var(--accent-bg); border-color: var(--accent-border); }
+.chat-info-hd { background: var(--surface-2); }
+.column-head { background: transparent; }
+.notif-item.unread { background: var(--accent-bg); }
+.notif-item.unread:hover { background: rgba(197, 240, 60, 0.2); }
