@@ -3,23 +3,23 @@
    ═══════════════════════════════════════════════════════════════════ */
 
 :root {
-  /* Surfaces */
-  --bg:           #FAFAF7;
+  /* Surfaces — estilo Material Dashboard */
+  --bg:           #F0F2F5;
   --surface:      #FFFFFF;
-  --surface-2:    #F5F5F2;
-  --surface-3:    #EDECE6;
-  --overlay:      rgba(26, 26, 24, 0.4);
+  --surface-2:    #F2F4F7;
+  --surface-3:    #E6E9EF;
+  --overlay:      rgba(52, 71, 103, 0.42);
 
   /* Borders */
-  --border:        #E8E6E1;
-  --border-strong: #D4D4D0;
+  --border:        #E3E6EC;
+  --border-strong: #CFD3DC;
   --border-focus:  #0F766E;
 
-  /* Text */
-  --text:         #1A1A18;
-  --text-soft:    #3F3F3C;
-  --text-muted:   #6B6B68;
-  --text-faded:   #9CA3AF;
+  /* Text — títulos navy, corpo cinza-azulado (Material) */
+  --text:         #344767;
+  --text-soft:    #51607A;
+  --text-muted:   #7B809A;
+  --text-faded:   #A4A9BC;
 
   /* Accents */
   --accent:        #0F766E;
@@ -28,23 +28,23 @@
   --accent-border: #99F6E4;
 
   /* Status colors */
-  --danger:       #DC2626;
-  --danger-bg:    #FEF2F2;
-  --warn:         #D97706;
-  --warn-bg:      #FFFBEB;
-  --success:      #059669;
-  --success-bg:   #ECFDF5;
-  --info:         #2563EB;
-  --info-bg:      #EFF6FF;
+  --danger:       #F44335;
+  --danger-bg:    #FEECEB;
+  --warn:         #FB8C00;
+  --warn-bg:      #FFF4E5;
+  --success:      #4CAF50;
+  --success-bg:   #EDF7ED;
+  --info:         #1A73E8;
+  --info-bg:      #E8F1FD;
 
   /* Pipeline (default, can be overridden per column) */
   --pipe-default: #94A3B8;
 
-  /* Shadows (subtle) */
-  --shadow-sm:  0 1px 2px rgba(26, 26, 24, 0.04);
-  --shadow:     0 1px 3px rgba(26, 26, 24, 0.06), 0 1px 2px rgba(26, 26, 24, 0.04);
-  --shadow-md:  0 4px 12px rgba(26, 26, 24, 0.08), 0 2px 4px rgba(26, 26, 24, 0.04);
-  --shadow-lg:  0 20px 40px rgba(26, 26, 24, 0.12), 0 8px 16px rgba(26, 26, 24, 0.06);
+  /* Shadows — suaves, com leve tom navy (Material) */
+  --shadow-sm:  0 2px 6px rgba(52, 71, 103, 0.08);
+  --shadow:     0 3px 10px rgba(52, 71, 103, 0.10);
+  --shadow-md:  0 8px 22px rgba(52, 71, 103, 0.13);
+  --shadow-lg:  0 18px 44px rgba(52, 71, 103, 0.20);
 
   /* Radii */
   --radius-sm:  6px;
@@ -69,7 +69,7 @@
 html, body {
   background: var(--bg);
   color: var(--text);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: 'Roboto', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -3539,3 +3539,25 @@ a { color: inherit; text-decoration: none; }
   .auto-list { width: auto; max-height: 190px; border-right: none; border-bottom: 1px solid var(--border); }
   .auto-config { padding: 14px; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   ESTILO MATERIAL DASHBOARD — superfícies limpas + ícone de KPI gradiente
+   ═══════════════════════════════════════════════════════════════════ */
+.main { background: var(--bg); }
+.sidebar { background: var(--surface); }
+.topbar { background: var(--surface); }
+.settings-section { background: var(--surface); }
+.modal-head { background: var(--surface); }
+
+/* Cards de KPI: caixa de ícone em gradiente, com brilho na própria cor */
+.metric-card { background: var(--surface); }
+.metric-icon {
+  width: 52px; height: 52px;
+  border-radius: 14px;
+  background: linear-gradient(135deg,
+    var(--metric-color, var(--accent)) 0%,
+    color-mix(in srgb, var(--metric-color, var(--accent)) 62%, #000) 100%);
+  color: #fff;
+  box-shadow: 0 7px 16px color-mix(in srgb, var(--metric-color, var(--accent)) 42%, transparent);
+}
+.metric-icon svg { width: 23px; height: 23px; }
