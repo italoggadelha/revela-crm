@@ -229,6 +229,10 @@
   function profileById(id) {
     return state.profiles.find(p => p.id === id);
   }
+  // Nome de exibição de um profile — nunca o email completo
+  function profileName(p) {
+    return (p && (p.nome || (p.email || '').split('@')[0])) || '—';
+  }
 
   // ═══════════════════════════════════════════════════════════════════
   // AUTH
@@ -885,42 +889,42 @@
     const el = $('leaderboard');
     if (!el) return;
 
-    // Calcula stats por vendedor: total atribuído, vendas, conversão
-    const stats = state.profiles.map(p => {
-      const leads = state.leads.filter(l => l.assigned_to === p.id);
-      const vendas = leads.filter(l => l.pipeline_status === 'vendida').length;
-      const total = leads.length;
-      const conv = total > 0 ? Math.round((vendas / total) * 100) : 0;
-      return {
-        profile: p,
-        total,
-        vendas,
-        conv,
-        score: vendas * 10 + total + conv * 0.1  // ranking composto
-      };
-    }).filter(s => s.total > 0)
+    // Stats por vendedor — inclui todos que atuam como vendedor (is_seller),
+    // mesmo sem nenhuma venda; ordena pelo desempenho.
+    const stats = state.profiles
+      .filter(p => p.is_seller !== false)
+      .map(p => {
+        const leads = state.leads.filter(l => l.assigned_to === p.id);
+        const vendas = leads.filter(l => l.pipeline_status === 'vendida').length;
+        const total = leads.length;
+        const conv = total > 0 ? Math.round((vendas / total) * 100) : 0;
+        return { profile: p, total, vendas, conv, score: vendas * 10 + total + conv * 0.1 };
+      })
       .sort((a, b) => b.score - a.score);
 
     if (stats.length === 0) {
       el.innerHTML = `<div class="empty-state" style="padding:24px 0">
-        <div class="empty-state-text">Ainda não há leads atribuídos a vendedores.</div>
+        <div class="empty-state-text">Nenhum vendedor no ranking. Marque "atuo como vendedor" no perfil.</div>
       </div>`;
       return;
     }
 
-    const medalClass = ['gold', 'silver', 'bronze'];
-    el.innerHTML = stats.slice(0, 10).map((s, i) => {
+    el.innerHTML = stats.map((s, i) => {
       const p = s.profile;
       const av = profileAvatar(p);
+      const hasMedal = s.vendas > 0 && i < 3;
+      const medal = hasMedal ? ['gold', 'silver', 'bronze'][i] : '';
+      const isTop = i === 0 && s.vendas > 0;
+      const rankIcon = hasMedal ? ['🥇', '🥈', '🥉'][i] : `#${i + 1}`;
       return `
-        <div class="leader-row ${medalClass[i] || ''}">
-          <span class="leader-rank">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}</span>
+        <div class="leader-row ${medal}${isTop ? ' leader-top' : ''}">
+          <span class="leader-rank">${rankIcon}</span>
           <div class="leader-avatar">
-            <img src="${av}" alt="" onerror="this.parentElement.textContent='${initials(p.nome || p.email)}'">
+            <img src="${av}" alt="" onerror="this.parentElement.textContent='${initials(profileName(p))}'">
           </div>
           <div class="leader-info">
-            <div class="leader-name">${escapeHtml(p.nome || p.email.split('@')[0])}</div>
-            <div class="leader-sub">${p.role === 'admin' ? 'Admin' : 'Vendedor'}</div>
+            <div class="leader-name">${escapeHtml(profileName(p))}</div>
+            <div class="leader-sub">${p.role === 'admin' ? 'Admin' : 'Vendedor'}${isTop ? ' · 🔥 Top vendedor' : ''}</div>
           </div>
           <div class="leader-stats">
             <div class="leader-stat">
@@ -1098,7 +1102,7 @@
       const pct = (n) => total > 0 ? Math.round((n / total) * 100) : 0;
 
       return `
-        <div class="source-card" data-source="${key}">
+        <div class="source-card" data-source="${key}" style="--src-bg:${meta.bg}">
           <div class="source-head">
             <div class="source-icon" style="background:${meta.bg}">${meta.icon}</div>
             <div style="min-width:0;flex:1">
@@ -1337,9 +1341,9 @@
     // Responsável: mostra o chip para o admin (que vê tarefas de todos)
     const resp = isAdmin() ? profileById(t.vendedor_id) : null;
     const respChip = resp
-      ? `<span class="task-resp" title="Responsável: ${escapeHtml(resp.nome || resp.email)}">
+      ? `<span class="task-resp" title="Responsável: ${escapeHtml(profileName(resp))}">
            <img src="${profileAvatar(resp)}" alt="">
-           ${escapeHtml(firstName(resp.nome) || resp.email.split('@')[0])}</span>`
+           ${escapeHtml(profileName(resp))}</span>`
       : '';
     return `
       <div class="task-row ${t.done ? 'done' : ''}" data-task-id="${t.id}">
@@ -1406,7 +1410,7 @@
     const adminUser = isAdmin();
     const sel = $('task-assignee');
     sel.innerHTML = state.profiles.map(p =>
-      `<option value="${p.id}">${escapeHtml(p.nome || p.email)}</option>`).join('');
+      `<option value="${p.id}">${escapeHtml(profileName(p))}</option>`).join('');
     sel.value = t ? t.vendedor_id : state.user.id;
     sel.disabled = !adminUser;
     $('task-delete').style.display = t ? '' : 'none';
@@ -1522,7 +1526,26 @@
     } catch (_) {
       state.googleStatus = { connected: false, email: null };
     }
-    if (state.currentView === 'agenda') renderAgendaHeader();
+    renderGoogleConn();
+  }
+
+  // Render do bloco de conexão Google em Configurações → Google
+  function renderGoogleConn() {
+    const el = $('google-conn');
+    if (!el) return;
+    const gs = state.googleStatus;
+    if (gs.connected) {
+      el.innerHTML = `<div class="google-conn-status connected">
+          <span class="agenda-gdot"></span> Conta conectada: <strong>${escapeHtml(gs.email || '')}</strong>
+        </div>
+        <button class="modal-btn" id="btn-google-disconnect">Desconectar conta</button>`;
+    } else {
+      el.innerHTML = `<div class="google-conn-status">Nenhuma conta Google conectada.</div>
+        <button class="btn-primary" id="btn-google-connect">
+          <svg><use href="#i-calendar"/></svg> Conectar conta Google</button>`;
+    }
+    const c = $('btn-google-connect'); if (c) c.onclick = connectGoogle;
+    const d = $('btn-google-disconnect'); if (d) d.onclick = disconnectGoogle;
   }
 
   async function connectGoogle() {
@@ -1610,20 +1633,7 @@
     const m = state.agendaMonth;
     const label = $('agenda-month-label');
     if (label) label.textContent = AG_MONTHS[m.getMonth()] + ' ' + m.getFullYear();
-
-    const gEl = $('agenda-google');
-    if (!gEl) return;
-    const gs = state.googleStatus;
-    if (gs.connected) {
-      gEl.innerHTML = `<span class="agenda-gstatus on" title="${escapeHtml(gs.email || '')}">
-          <span class="agenda-gdot"></span>Google conectado</span>
-        <button class="btn-ghost" id="agenda-google-disconnect">Desconectar</button>`;
-    } else {
-      gEl.innerHTML = `<button class="btn-ghost" id="agenda-google-connect">
-        <svg><use href="#i-calendar"/></svg> Conectar Google</button>`;
-    }
-    const c = $('agenda-google-connect'); if (c) c.onclick = connectGoogle;
-    const d = $('agenda-google-disconnect'); if (d) d.onclick = disconnectGoogle;
+    // A conexão Google fica em Configurações → Google (não mais na Agenda).
   }
 
   function renderAgendaGrid() {
@@ -1986,6 +1996,7 @@
     $('google-enabled').checked = !!c.enabled;
     $('google-client-id').value = c.client_id || '';
     $('google-client-secret').value = c.client_secret || '';
+    refreshGoogleStatus();
 
     const dot = $('google-status-dot');
     const txt = $('google-status-text');
@@ -2110,6 +2121,7 @@
     $('profile-nome').value = p.nome || '';
     $('profile-telefone').value = p.telefone || '';
     $('profile-password').value = '';
+    if ($('profile-is-seller')) $('profile-is-seller').checked = p.is_seller !== false;
   }
 
   async function saveProfile() {
@@ -2124,9 +2136,9 @@
     btn.innerHTML = '<span class="spinner"></span> Salvando';
 
     try {
-      // Atualiza profile (nome, telefone)
+      // Atualiza profile (nome, telefone, atua como vendedor)
       const { error: pErr } = await supabase.from('profiles')
-        .update({ nome, telefone })
+        .update({ nome, telefone, is_seller: $('profile-is-seller').checked })
         .eq('id', state.user.id);
       if (pErr) throw pErr;
 

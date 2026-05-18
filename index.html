@@ -442,6 +442,16 @@
           </div>
         </div>
 
+        <div class="chart-card">
+          <div class="chart-card-head">
+            <div>
+              <div class="chart-title">🏆 Top vendedores</div>
+              <div class="chart-sub">Performance da equipe — leads, vendas e taxa de conversão</div>
+            </div>
+          </div>
+          <div class="leaderboard" id="leaderboard"></div>
+        </div>
+
         <div class="metric-grid-2col">
           <div class="chart-card">
             <div class="chart-card-head">
@@ -461,16 +471,6 @@
             </div>
             <div class="chart-wrap"><canvas id="chart-timeline"></canvas></div>
           </div>
-        </div>
-
-        <div class="chart-card">
-          <div class="chart-card-head">
-            <div>
-              <div class="chart-title">🏆 Top vendedores</div>
-              <div class="chart-sub">Performance da equipe — leads, vendas e taxa de conversão</div>
-            </div>
-          </div>
-          <div class="leaderboard" id="leaderboard"></div>
         </div>
 
         <div class="chart-card">
@@ -496,7 +496,6 @@
             <button class="btn-ghost" id="agenda-today">Hoje</button>
           </div>
           <div class="agenda-actions">
-            <span id="agenda-google"></span>
             <button class="btn-primary" id="btn-add-appt">
               <svg><use href="#i-plus"/></svg> Nova reunião
             </button>
@@ -649,6 +648,10 @@
             <label class="field-block-label">Nova senha (opcional — deixe vazio se não quer trocar)</label>
             <input type="password" class="input-text" id="profile-password" placeholder="Mínimo 6 caracteres">
           </div>
+          <label class="perm-check" style="display:inline-flex;width:auto;margin-top:4px">
+            <input type="checkbox" id="profile-is-seller">
+            <span>Atuo como vendedor — aparecer no ranking do Dashboard</span>
+          </label>
           <div class="row-flex end" style="margin-top: 12px">
             <button class="btn-primary" id="btn-save-profile">
               <svg><use href="#i-check"/></svg> Salvar perfil
@@ -797,10 +800,7 @@
             <strong>URI de redirecionamento autorizado</strong> (cadastre no Google Cloud Console):<br>
             <code>https://crm.mylion.com.br</code>
           </div>
-          <div class="wa-webhook-hint" style="margin-top:10px">
-            Depois de salvar as credenciais, a opção <strong>Conectar conta Google</strong> ficará
-            disponível na aba <strong>Agenda</strong> do menu.
-          </div>
+          <div class="google-conn-box" id="google-conn"></div>
         </div>
 
         </div><!-- /settings-body -->
