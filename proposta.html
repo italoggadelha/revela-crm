@@ -6,85 +6,163 @@
 <title>Proposta Comercial · MyLion</title>
 <meta name="robots" content="noindex">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Lora:wght@600;700&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  :root{ --lime:#C5F03C; --teal:#14B8A6; --bg:#0C0F12; --bg2:#14181D;
-    --ink:#F4F6F4; --muted:#9BA6A4; --line:#262C31; }
+  :root{ --lime:#C5F03C; --teal:#2DD4BF; --bg:#0A0D10; --bg2:#13181D;
+    --ink:#F2F5F3; --muted:#94A0A0; --line:#252C32;
+    --fd:'Sora',sans-serif; --fb:'Inter',sans-serif; }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
-  body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--ink);overflow:hidden}
+  body{
+    font-family:var(--fb);color:var(--ink);overflow:hidden;
+    background:
+      radial-gradient(38vw 38vw at 8% 4%, rgba(45,212,191,.20), transparent 72%),
+      radial-gradient(40vw 40vw at 94% 98%, rgba(197,240,60,.16), transparent 72%),
+      radial-gradient(60vw 50vw at 50% 50%, rgba(255,255,255,.018), transparent 70%),
+      var(--bg);
+  }
+  /* textura pontilhada + vinheta nas pontas */
+  body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+    background-image:radial-gradient(rgba(255,255,255,.028) 1px,transparent 1px);
+    background-size:28px 28px}
+  body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+    box-shadow:inset 0 0 200px 60px rgba(0,0,0,.55)}
   .pp-load,.pp-err{display:flex;height:100vh;align-items:center;justify-content:center;
-    color:var(--muted);font-size:15px;padding:30px;text-align:center}
+    color:var(--muted);font-size:15px;padding:30px;text-align:center;position:relative;z-index:2}
 
-  .deck{position:fixed;inset:0;overflow:hidden}
+  .deck{position:fixed;inset:0;z-index:2}
   .slide{position:absolute;inset:0;display:flex;flex-direction:column;
-    justify-content:center;padding:7vh 9vw;opacity:0;pointer-events:none;
-    transition:opacity .45s ease, transform .45s ease;transform:translateY(14px)}
-  .slide.active{opacity:1;pointer-events:auto;transform:translateY(0)}
-  .slide.cover{align-items:center;text-align:center}
+    align-items:center;justify-content:center;text-align:center;
+    padding:9vh 8vw;opacity:0;pointer-events:none;
+    transition:opacity .5s ease,transform .5s ease;transform:translateY(20px) scale(.99)}
+  .slide.active{opacity:1;pointer-events:auto;transform:translateY(0) scale(1)}
 
-  .kicker{font-size:13px;font-weight:800;letter-spacing:.22em;text-transform:uppercase;
-    color:var(--lime)}
-  h1{font-family:'Lora',serif;font-weight:700;font-size:clamp(34px,6vw,68px);line-height:1.08;
-    margin:18px 0}
-  h2{font-family:'Lora',serif;font-weight:700;font-size:clamp(28px,4.4vw,46px);line-height:1.12;
-    margin:14px 0 20px}
-  .lead{font-size:clamp(16px,1.9vw,21px);color:var(--muted);line-height:1.6;max-width:760px}
-  .big{font-size:clamp(18px,2.3vw,26px);color:var(--ink);line-height:1.55;max-width:820px;font-weight:500}
-  .cover .brand{font-family:'Inter';font-weight:900;letter-spacing:.3em;font-size:15px;color:var(--lime)}
-  .cover .who{margin-top:26px;font-size:14px;color:var(--muted)}
+  .kicker{display:inline-flex;align-items:center;gap:8px;font-family:var(--fd);
+    font-size:12px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;
+    color:var(--lime);padding:7px 15px;border:1px solid rgba(197,240,60,.3);
+    border-radius:30px;background:rgba(197,240,60,.06)}
+  h1{font-family:var(--fd);font-weight:800;font-size:clamp(38px,6.6vw,76px);line-height:1.04;
+    letter-spacing:-.02em;margin:22px 0 16px}
+  h2{font-family:var(--fd);font-weight:700;font-size:clamp(28px,4.6vw,50px);line-height:1.1;
+    letter-spacing:-.015em;margin:16px 0 22px}
+  .lead{font-size:clamp(16px,1.85vw,21px);color:var(--muted);line-height:1.62;max-width:680px}
+  .big{font-family:var(--fd);font-size:clamp(19px,2.4vw,29px);color:var(--ink);
+    line-height:1.5;max-width:840px;font-weight:500}
   .accent{color:var(--lime)}
+  .cover .brand{display:inline-flex;align-items:center;gap:9px;font-family:var(--fd);
+    font-weight:800;letter-spacing:.26em;font-size:14px;color:var(--lime)}
+  .cover .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--lime);
+    box-shadow:0 0 14px var(--lime)}
+  .who{margin-top:30px;font-size:13.5px;color:var(--muted);font-family:var(--fd);letter-spacing:.04em}
 
-  /* listas e cards */
-  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;
-    margin-top:10px;max-width:900px}
-  .card{background:var(--bg2);border:1px solid var(--line);border-radius:16px;padding:22px 24px}
-  .card .n{font-family:'Lora',serif;font-size:30px;color:var(--lime);font-weight:700}
-  .card h3{font-size:16px;margin:8px 0 5px}
+  .ico{display:inline-flex;align-items:center;justify-content:center}
+  .ico svg{width:100%;height:100%;stroke:currentColor;fill:none;
+    stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+
+  /* grid de cards */
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px;
+    margin-top:14px;max-width:960px;width:100%}
+  .card{background:linear-gradient(180deg,var(--bg2),rgba(19,24,29,.55));
+    border:1px solid var(--line);border-radius:20px;padding:26px 22px;text-align:center}
+  .card .chip{width:54px;height:54px;margin:0 auto 14px;border-radius:15px;
+    background:linear-gradient(135deg,rgba(45,212,191,.9),rgba(197,240,60,.85));
+    color:#0A0D10;padding:13px}
+  .card .n{font-family:var(--fd);font-size:34px;font-weight:800;color:var(--lime);
+    line-height:1;margin-bottom:8px}
+  .card h3{font-family:var(--fd);font-size:17px;font-weight:700;margin-bottom:6px}
   .card p{font-size:13.5px;color:var(--muted);line-height:1.55}
-  .deliv{display:flex;flex-direction:column;gap:11px;margin-top:8px;max-width:760px}
-  .deliv-row{display:flex;gap:14px;align-items:center;background:var(--bg2);
-    border:1px solid var(--line);border-radius:13px;padding:15px 18px}
-  .deliv-row .ck{width:28px;height:28px;flex-shrink:0;border-radius:50%;background:var(--lime);
-    color:#14180A;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:15px}
-  .deliv-row span{font-size:15.5px;font-weight:600}
-  .money{background:linear-gradient(135deg,var(--teal),#0F766E);border-radius:20px;
-    padding:32px 36px;max-width:680px;margin-top:8px}
-  .money .v{font-size:clamp(20px,2.6vw,30px);font-weight:700;white-space:pre-wrap;line-height:1.5}
+
+  /* dashboard de stats */
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px;
+    margin-top:16px;max-width:880px;width:100%}
+  .stat{background:linear-gradient(180deg,var(--bg2),rgba(19,24,29,.4));
+    border:1px solid var(--line);border-radius:18px;padding:24px 18px}
+  .stat .v{font-family:var(--fd);font-size:clamp(30px,4vw,46px);font-weight:800;
+    background:linear-gradient(135deg,var(--teal),var(--lime));
+    -webkit-background-clip:text;background-clip:text;color:transparent;line-height:1}
+  .stat .l{font-size:12.5px;color:var(--muted);margin-top:8px;line-height:1.45}
+
+  /* entregas */
+  .deliv{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:11px;
+    margin-top:12px;max-width:820px;width:100%}
+  .deliv-row{display:flex;gap:12px;align-items:center;text-align:left;
+    background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+  .deliv-row .ck{width:30px;height:30px;flex-shrink:0;border-radius:9px;
+    background:linear-gradient(135deg,var(--teal),var(--lime));color:#0A0D10;padding:7px}
+  .deliv-row span{font-size:14.5px;font-weight:600}
+
+  .money{background:linear-gradient(135deg,rgba(45,212,191,.16),rgba(197,240,60,.12));
+    border:1px solid rgba(197,240,60,.3);border-radius:24px;padding:38px 44px;
+    max-width:680px;margin-top:8px}
+  .money .ico{width:42px;height:42px;color:var(--lime);margin-bottom:14px}
+  .money .v{font-family:var(--fd);font-size:clamp(21px,2.8vw,32px);font-weight:700;
+    white-space:pre-wrap;line-height:1.45}
 
   /* navegação */
-  .nav{position:fixed;top:50%;transform:translateY(-50%);width:54px;height:54px;
-    border-radius:50%;background:rgba(255,255,255,.07);border:1px solid var(--line);
-    color:var(--ink);font-size:24px;cursor:pointer;display:flex;align-items:center;
-    justify-content:center;transition:.15s;z-index:20}
-  .nav:hover{background:var(--lime);color:#14180A;border-color:var(--lime)}
-  .nav:disabled{opacity:.25;cursor:default}
-  .nav.prev{left:22px}.nav.next{right:22px}
-  .dots{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);display:flex;
-    gap:7px;z-index:20}
-  .dot{width:8px;height:8px;border-radius:50%;background:var(--line);cursor:pointer;transition:.15s}
-  .dot.on{background:var(--lime);width:22px;border-radius:4px}
-  .count{position:fixed;bottom:18px;right:24px;font-size:12px;color:var(--muted);z-index:20}
-  .pp-brandtag{position:fixed;top:20px;left:26px;font-weight:900;letter-spacing:.2em;
-    font-size:12px;color:var(--muted);z-index:20}
+  .nav{position:fixed;top:50%;transform:translateY(-50%);width:56px;height:56px;
+    border-radius:50%;background:rgba(255,255,255,.06);border:1px solid var(--line);
+    color:var(--ink);cursor:pointer;display:flex;align-items:center;justify-content:center;
+    transition:.16s;z-index:20;backdrop-filter:blur(6px)}
+  .nav:hover:not(:disabled){background:var(--lime);color:#0A0D10;border-color:var(--lime);
+    transform:translateY(-50%) scale(1.08)}
+  .nav:disabled{opacity:.22;cursor:default}
+  .nav svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2.4;
+    stroke-linecap:round;stroke-linejoin:round}
+  .nav.prev{left:26px}.nav.next{right:26px}
+  .dots{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);display:flex;
+    gap:8px;z-index:20}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--line);cursor:pointer;transition:.18s}
+  .dot.on{background:var(--lime);width:26px;border-radius:4px;box-shadow:0 0 12px rgba(197,240,60,.6)}
+  .count{position:fixed;bottom:22px;right:28px;font-size:12px;color:var(--muted);
+    font-family:var(--fd);letter-spacing:.06em;z-index:20}
+  .brandtag{position:fixed;top:24px;left:30px;display:flex;align-items:center;gap:8px;
+    font-family:var(--fd);font-weight:800;letter-spacing:.22em;font-size:12px;
+    color:var(--muted);z-index:20}
+  .brandtag .dot{width:7px;height:7px;border-radius:50%;background:var(--lime)}
 
   /* aceite */
-  .ac-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:620px;margin-top:6px}
-  .ac-f label{font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px}
-  .ac-f input{width:100%;background:var(--bg2);border:1px solid var(--line);border-radius:10px;
-    padding:12px 13px;font-size:14px;font-family:inherit;color:var(--ink)}
+  .ac-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px;max-width:600px;
+    margin-top:8px;width:100%;text-align:left}
+  .ac-f label{font-family:var(--fd);font-size:11.5px;font-weight:600;color:var(--muted);
+    display:block;margin-bottom:5px;letter-spacing:.03em}
+  .ac-f input{width:100%;background:var(--bg2);border:1px solid var(--line);border-radius:11px;
+    padding:13px 14px;font-size:14px;font-family:inherit;color:var(--ink)}
   .ac-f input:focus{outline:none;border-color:var(--lime)}
-  .ac-btn{margin-top:20px;background:var(--lime);color:#14180A;border:none;border-radius:13px;
-    padding:17px 40px;font-size:17px;font-weight:800;cursor:pointer;font-family:inherit}
-  .ac-btn:hover{filter:brightness(1.06)}.ac-btn:disabled{opacity:.5;cursor:default}
-  .ac-msg{font-size:13px;color:#FCA5A5;margin-top:12px}
+  .ac-btn{display:inline-flex;align-items:center;gap:9px;margin-top:22px;background:var(--lime);
+    color:#0A0D10;border:none;border-radius:14px;padding:17px 42px;font-size:17px;
+    font-weight:800;font-family:var(--fd);cursor:pointer;transition:.15s}
+  .ac-btn:hover:not(:disabled){filter:brightness(1.07);transform:translateY(-2px)}
+  .ac-btn:disabled{opacity:.5;cursor:default}
+  .ac-btn svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:2.6;
+    stroke-linecap:round;stroke-linejoin:round}
+  .ac-msg{font-size:13px;color:#FCA5A5;margin-top:13px}
   @media(max-width:640px){
-    .slide{padding:8vh 7vw}.nav{width:44px;height:44px;font-size:20px}
-    .nav.prev{left:8px}.nav.next{right:8px}.ac-grid{grid-template-columns:1fr}
+    .slide{padding:10vh 6vw}.nav{width:46px;height:46px}.nav.prev{left:8px}.nav.next{right:8px}
+    .ac-grid{grid-template-columns:1fr}.brandtag{left:16px}.money{padding:28px 24px}
   }
 </style>
 </head>
 <body>
+<!-- biblioteca de ícones -->
+<svg style="display:none"><defs>
+  <symbol id="ic-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4"/></symbol>
+  <symbol id="ic-layers" viewBox="0 0 24 24"><polygon points="12 3 21 8 12 13 3 8 12 3"/><polyline points="3 13 12 18 21 13"/></symbol>
+  <symbol id="ic-trend" viewBox="0 0 24 24"><polyline points="3 17 9 11 13 15 21 6"/><polyline points="15 6 21 6 21 12"/></symbol>
+  <symbol id="ic-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></symbol>
+  <symbol id="ic-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><polygon points="16 8 14 14 8 16 10 10 16 8"/></symbol>
+  <symbol id="ic-rocket" viewBox="0 0 24 24"><path d="M5 15c-1.5 1.5-2 5-2 5s3.5-.5 5-2"/><path d="M9 11a16 16 0 0 1 8-8c2.5 0 4 1.5 4 4a16 16 0 0 1-8 8l-4-4Z"/><circle cx="15" cy="9" r="1.4"/></symbol>
+  <symbol id="ic-refresh" viewBox="0 0 24 24"><polyline points="21 3 21 9 15 9"/><path d="M21 9A9 9 0 1 0 18.5 18"/></symbol>
+  <symbol id="ic-users" viewBox="0 0 24 24"><path d="M16 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3.5"/><path d="M21 20v-2a4 4 0 0 0-3-3.8"/></symbol>
+  <symbol id="ic-puzzle" viewBox="0 0 24 24"><path d="M9 3h6v3a2 2 0 0 0 4 0V3h2v6h-3a2 2 0 0 0 0 4h3v6h-6v-3a2 2 0 0 0-4 0v3H3v-6h3a2 2 0 0 0 0-4H3V3h6Z"/></symbol>
+  <symbol id="ic-spark" viewBox="0 0 24 24"><path d="M12 3v6M12 15v6M3 12h6M15 12h6M6 6l3 3M15 15l3 3M18 6l-3 3M9 15l-3 3"/></symbol>
+  <symbol id="ic-cash" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="ic-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></symbol>
+  <symbol id="ic-flag" viewBox="0 0 24 24"><path d="M4 21V4M4 4h13l-2 4 2 4H4"/></symbol>
+  <symbol id="ic-arrow-l" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></symbol>
+  <symbol id="ic-arrow-r" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></symbol>
+</defs></svg>
+
 <div id="pp-root"><div class="pp-load">Carregando proposta…</div></div>
 
 <script src="./config.js"></script>
@@ -98,6 +176,7 @@
 
   function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+  function ic(id){return '<span class="ico"><svg><use href="#ic-'+id+'"/></svg></span>';}
   function api(p){return fetch(FN,{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify(Object.assign({id:ID},p))}).then(function(r){return r.json();});}
 
@@ -107,101 +186,116 @@
     build(p);
   }).catch(function(){root.innerHTML='<div class="pp-err">Não foi possível carregar a proposta.</div>';});
 
+  function card(icon,t,d){
+    return '<div class="card"><span class="ico chip"><svg><use href="#ic-'+icon+'"/></svg></span>'+
+      '<h3>'+t+'</h3><p>'+d+'</p></div>';}
+  function stepc(n,t,d){
+    return '<div class="card"><div class="n">'+n+'</div><h3>'+t+'</h3><p>'+d+'</p></div>';}
+  function stat(v,l){return '<div class="stat"><div class="v">'+v+'</div><div class="l">'+l+'</div></div>';}
+
   function build(p){
     var nicho=p.client_niche||'o seu mercado';
     var deliv=(p.deliverables||[]).map(function(d){
-      return '<div class="deliv-row"><span class="ck">✓</span><span>'+esc(d)+'</span></div>';}).join('');
+      return '<div class="deliv-row"><span class="ico ck"><svg><use href="#ic-check"/></svg></span>'+
+        '<span>'+esc(d)+'</span></div>';}).join('');
 
     slides=[
-      // 1 — capa
-      '<div class="slide cover active"><div class="brand">MYLION</div>'+
+      '<div class="slide cover active"><div class="brand"><span class="dot"></span>MYLION</div>'+
         '<h1>Proposta<br>Comercial</h1>'+
-        '<div class="lead">Um plano sob medida para '+esc(p.client_name||'a sua empresa')+' crescer com previsibilidade.</div>'+
-        '<div class="who">Apresentado por '+esc(p.vendedor)+' · '+new Date(p.created_at).toLocaleDateString('pt-BR')+'</div></div>',
-      // 2 — o desafio
-      '<div class="slide"><div class="kicker">O seu momento</div>'+
+        '<div class="lead">Um plano sob medida para '+esc(p.client_name||'a sua empresa')+
+        ' crescer com previsibilidade.</div>'+
+        '<div class="who">Apresentado por '+esc(p.vendedor)+' · '+
+        new Date(p.created_at).toLocaleDateString('pt-BR')+'</div></div>',
+
+      '<div class="slide"><div class="kicker">'+ic('search')+'O seu momento</div>'+
         '<h2>Onde você está hoje</h2>'+
         '<div class="big">'+esc(p.client_context||'Você quer crescer — mas falta um processo previsível de aquisição de clientes.').replace(/\n/g,'<br>')+'</div></div>',
-      // 3 — o que podemos fazer
-      '<div class="slide"><div class="kicker">A solução</div>'+
-        '<h2>O que podemos fazer por você</h2>'+
-        '<div class="grid">'+
-        card('🎯','Atrair','Levar até você as pessoas certas, de forma constante — não por sorte.')+
-        card('⚙️','Estruturar','Montar um funil de vendas que transforma interesse em cliente.')+
-        card('📈','Escalar','Crescer com método e dados, sem depender só de indicação.')+
+
+      '<div class="slide"><div class="kicker">'+ic('spark')+'A solução</div>'+
+        '<h2>O que podemos fazer por você</h2><div class="grid">'+
+        card('target','Atrair','Levar até você as pessoas certas, de forma constante — não por sorte.')+
+        card('layers','Estruturar','Montar um funil de vendas que transforma interesse em cliente.')+
+        card('trend','Escalar','Crescer com método e dados, sem depender só de indicação.')+
         '</div></div>',
-      // 4 — mercado
-      '<div class="slide"><div class="kicker">O mercado</div>'+
+
+      '<div class="slide"><div class="kicker">'+ic('trend')+'O mercado</div>'+
         '<h2>O momento de '+esc(nicho)+'</h2>'+
-        '<div class="big">O mercado está aquecido e competitivo. Quem cresce não é quem trabalha mais — é quem tem um processo de aquisição <span class="accent">previsível</span>. '+
-        'Hoje a maioria dos negócios do setor ainda depende de indicação e sorte. Existe uma janela clara para quem se estrutura primeiro.</div></div>',
-      // 5 — metodologia
-      '<div class="slide"><div class="kicker">Como funciona</div>'+
-        '<h2>Nossa metodologia</h2>'+
-        '<div class="grid">'+
+        '<div class="stats">'+
+        stat('4º','maior mercado do mundo no setor')+
+        stat('59%','dos gestores querem crescer o faturamento')+
+        stat('24%','têm uma estratégia comercial estruturada')+
+        '</div>'+
+        '<div class="lead" style="margin-top:22px">Existe uma janela clara para quem se '+
+        '<span class="accent">estrutura primeiro</span>.</div></div>',
+
+      '<div class="slide"><div class="kicker">'+ic('compass')+'Como funciona</div>'+
+        '<h2>Nossa metodologia</h2><div class="grid">'+
         stepc('01','Diagnóstico','Entendemos o seu negócio, suas metas e seus números.')+
         stepc('02','Estratégia','Desenhamos o funil, a oferta e os canais de aquisição.')+
         stepc('03','Execução','Colocamos no ar: tráfego, conteúdo, automações e CRM.')+
         stepc('04','Otimização','Acompanhamos os números e melhoramos mês a mês.')+
         '</div></div>',
-      // 6 — entregas
-      '<div class="slide"><div class="kicker">Escopo</div>'+
+
+      '<div class="slide"><div class="kicker">'+ic('layers')+'Escopo</div>'+
         '<h2>O que vamos entregar</h2>'+
-        '<div class="deliv">'+(deliv||'<div class="big">A combinar.</div>')+'</div></div>',
-      // 7 — diferenciais
-      '<div class="slide"><div class="kicker">Por que a MyLion</div>'+
-        '<h2>O que nos torna diferentes</h2>'+
-        '<div class="grid">'+
-        card('🔍','Foco em ROI','Cada R$ investido é medido. O objetivo é retorno, não vaidade.')+
-        card('🤝','Time próximo','Acompanhamento de verdade — você não fica sozinho.')+
-        card('🧩','Tudo integrado','Tráfego, conteúdo, CRM e automações falando a mesma língua.')+
+        (deliv?'<div class="deliv">'+deliv+'</div>':'<div class="big">A combinar.</div>')+'</div>',
+
+      '<div class="slide"><div class="kicker">'+ic('spark')+'Por que a MyLion</div>'+
+        '<h2>O que nos torna diferentes</h2><div class="grid">'+
+        card('target','Foco em ROI','Cada R$ investido é medido. O objetivo é retorno, não vaidade.')+
+        card('users','Time próximo','Acompanhamento de verdade — você não fica sozinho.')+
+        card('puzzle','Tudo integrado','Tráfego, conteúdo, CRM e automações na mesma estratégia.')+
         '</div></div>',
-      // 8 — resultados
-      '<div class="slide"><div class="kicker">O que esperar</div>'+
+
+      '<div class="slide"><div class="kicker">'+ic('rocket')+'O que esperar</div>'+
         '<h2>Resultados que buscamos</h2>'+
-        '<div class="big">Uma agenda mais cheia e <span class="accent">previsível</span>, um custo de aquisição sob controle e um processo comercial que continua funcionando — com ou sem você na operação do dia a dia.</div></div>',
-      // 9 — financeiro
-      '<div class="slide"><div class="kicker">Investimento</div>'+
+        '<div class="stats">'+
+        stat('+ Agenda','mais cheia e previsível todo mês')+
+        stat('ROI','custo de aquisição sob controle')+
+        stat('Processo','que funciona com ou sem você na operação')+
+        '</div></div>',
+
+      '<div class="slide"><div class="kicker">'+ic('cash')+'Investimento</div>'+
         '<h2>Proposta financeira</h2>'+
-        '<div class="money"><div class="v">'+esc(p.payment||'A combinar')+'</div></div></div>',
-      // 10 — pitch final
-      '<div class="slide cover"><div class="kicker">Vamos juntos?</div>'+
+        '<div class="money"><span class="ico"><svg><use href="#ic-cash"/></svg></span>'+
+        '<div class="v">'+esc(p.payment||'A combinar')+'</div></div></div>',
+
+      '<div class="slide cover"><div class="kicker">'+ic('flag')+'Vamos juntos?</div>'+
         '<h1>Sua máquina de<br>vendas começa <span class="accent">agora</span></h1>'+
-        '<div class="lead">Você pode continuar dependendo da sorte — ou construir um processo previsível. '+
-        'A MyLion já fez isso por outros negócios. Vamos fazer pelo seu.</div></div>',
-      // 11 — aceite
+        '<div class="lead">Você pode continuar dependendo da sorte — ou construir um processo '+
+        'previsível. A MyLion já fez isso por outros negócios. Vamos fazer pelo seu.</div></div>',
+
       acceptSlide(p)
     ];
     render(p);
   }
-  function card(ic,t,d){return '<div class="card"><div style="font-size:26px">'+ic+'</div>'+
-    '<h3>'+t+'</h3><p>'+d+'</p></div>';}
-  function stepc(n,t,d){return '<div class="card"><div class="n">'+n+'</div>'+
-    '<h3>'+t+'</h3><p>'+d+'</p></div>';}
+
   function acceptSlide(p){
     if(p.status==='accepted')
-      return '<div class="slide cover"><div style="font-size:60px">✅</div>'+
-        '<h2>Proposta aceita</h2><div class="lead">Esta proposta já foi aceita. Em breve entramos em contato com o contrato.</div></div>';
-    return '<div class="slide"><div class="kicker">Aceite</div>'+
+      return '<div class="slide cover"><span class="ico" style="width:64px;height:64px;color:var(--lime)">'+
+        '<svg><use href="#ic-check"/></svg></span>'+
+        '<h2>Proposta aceita</h2><div class="lead">Esta proposta já foi aceita. '+
+        'Em breve entramos em contato com o contrato.</div></div>';
+    return '<div class="slide"><div class="kicker">'+ic('check')+'Aceite</div>'+
       '<h2>Vamos começar?</h2>'+
-      '<div class="lead" style="margin-bottom:6px">Preencha seus dados para aceitar a proposta — usaremos para o contrato.</div>'+
+      '<div class="lead" style="margin-bottom:6px">Preencha seus dados para aceitar a proposta.</div>'+
       '<div class="ac-grid">'+
         acf('ac-nome','Nome completo *')+acf('ac-doc','CPF / CNPJ')+
         acf('ac-email','E-mail *')+acf('ac-tel','Telefone')+
         acf('ac-empresa','Empresa')+acf('ac-end','Endereço')+
       '</div>'+
-      '<button class="ac-btn" id="ac-btn">Aceitar proposta ✓</button>'+
+      '<button class="ac-btn" id="ac-btn">'+ic('check')+'Aceitar proposta</button>'+
       '<div class="ac-msg" id="ac-msg"></div></div>';
   }
   function acf(id,lb){return '<div class="ac-f"><label>'+lb+'</label><input id="'+id+'"></div>';}
 
   function render(p){
-    root.innerHTML='<div class="pp-brandtag">MYLION</div><div class="deck" id="deck">'+slides.join('')+'</div>'+
-      '<button class="nav prev" id="nav-prev">‹</button>'+
-      '<button class="nav next" id="nav-next">›</button>'+
-      '<div class="dots" id="dots"></div><div class="count" id="count"></div>';
     var dots='';for(var i=0;i<slides.length;i++)dots+='<span class="dot" data-i="'+i+'"></span>';
-    document.getElementById('dots').innerHTML=dots;
+    root.innerHTML='<div class="brandtag"><span class="dot"></span>MYLION</div>'+
+      '<div class="deck">'+slides.join('')+'</div>'+
+      '<button class="nav prev" id="nav-prev"><svg><use href="#ic-arrow-l"/></svg></button>'+
+      '<button class="nav next" id="nav-next"><svg><use href="#ic-arrow-r"/></svg></button>'+
+      '<div class="dots">'+dots+'</div><div class="count" id="count"></div>';
     document.getElementById('nav-prev').onclick=function(){go(idx-1);};
     document.getElementById('nav-next').onclick=function(){go(idx+1);};
     document.querySelectorAll('.dot').forEach(function(d){d.onclick=function(){go(+d.dataset.i);};});
@@ -214,8 +308,7 @@
   function go(i){
     if(i<0||i>=slides.length)return;
     idx=i;
-    var sl=document.querySelectorAll('.slide');
-    sl.forEach(function(s,k){s.classList.toggle('active',k===i);});
+    document.querySelectorAll('.slide').forEach(function(s,k){s.classList.toggle('active',k===i);});
     document.querySelectorAll('.dot').forEach(function(d,k){d.classList.toggle('on',k===i);});
     document.getElementById('nav-prev').disabled=i===0;
     document.getElementById('nav-next').disabled=i===slides.length-1;
@@ -231,15 +324,17 @@
     api({action:'accept',data:d}).then(function(r){
       if(r.ok){
         root.innerHTML='<div class="deck"><div class="slide cover active">'+
-          '<div style="font-size:64px">🎉</div><h1>Proposta aceita!</h1>'+
+          '<span class="ico" style="width:70px;height:70px;color:var(--lime)">'+
+          '<svg><use href="#ic-check"/></svg></span>'+
+          '<h1>Proposta aceita!</h1>'+
           '<div class="lead">Obrigado, '+esc(d.nome.split(' ')[0])+'! Recebemos o seu aceite. '+
           'Vamos preparar o contrato e entrar em contato em breve.</div></div></div>';
       }else{
-        btn.disabled=false;btn.textContent='Aceitar proposta ✓';
+        btn.disabled=false;btn.innerHTML='Aceitar proposta';
         msg.textContent=r.error||'Não foi possível registrar o aceite.';
       }
     }).catch(function(){
-      btn.disabled=false;btn.textContent='Aceitar proposta ✓';
+      btn.disabled=false;btn.innerHTML='Aceitar proposta';
       msg.textContent='Erro de conexão. Tente de novo.';
     });
   }
