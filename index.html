@@ -96,6 +96,9 @@
     <symbol id="i-bolt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
     </symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+    </symbol>
   </defs>
 </svg>
 </head>
@@ -199,6 +202,26 @@
         <span class="stat-pill"><strong id="stat-total">0</strong> leads</span>
         <span class="stat-pill accent"><strong id="stat-week">0</strong> semana</span>
         <span class="stat-pill success"><strong id="stat-vendida">0</strong> vendidas</span>
+      </div>
+
+      <!-- Tarefas do dia + notificações -->
+      <button class="topbar-tasks" id="topbar-tasks" title="Tarefas que vencem hoje">
+        <svg><use href="#i-task"/></svg>
+        <span id="topbar-tasks-count">0</span>
+        <span class="topbar-tasks-lb">hoje</span>
+      </button>
+      <div class="topbar-bell-wrap">
+        <button class="topbar-bell" id="topbar-bell" title="Notificações">
+          <svg><use href="#i-bell"/></svg>
+          <span class="topbar-bell-badge" id="topbar-bell-badge" style="display:none">0</span>
+        </button>
+        <div class="notif-panel" id="notif-panel">
+          <div class="notif-head">
+            <span>Notificações</span>
+            <button class="notif-readall" id="notif-readall">Marcar todas como lidas</button>
+          </div>
+          <div class="notif-list" id="notif-list"></div>
+        </div>
       </div>
 
       <!-- Menu de usuário (canto superior direito) -->

@@ -92,8 +92,16 @@ Deno.serve(async (req) => {
       r.ok ? { status: 'sent', sent_at: new Date().toISOString(), error: null }
            : { status: 'failed', error: r.error }
     ).eq('id', m.id)
-    if (r.ok) result.scheduled_sent = (result.scheduled_sent as number) + 1
-    else result.scheduled_failed = (result.scheduled_failed as number) + 1
+    if (r.ok) {
+      result.scheduled_sent = (result.scheduled_sent as number) + 1
+      await admin.from('notifications').insert({
+        user_id: m.vendedor_id, type: 'automation', lead_id: m.lead_id,
+        title: 'Mensagem automática enviada',
+        body: 'Sua mensagem agendada para ' + (lead.nome || 'o lead') + ' foi enviada.',
+      })
+    } else {
+      result.scheduled_failed = (result.scheduled_failed as number) + 1
+    }
   }
 
   // ── 2. Lembretes de reunião ──
@@ -111,7 +119,14 @@ Deno.serve(async (req) => {
         const lead = (a as any).leads
         if (lead && lead.telefone) {
           const r = await sendWhatsApp(cfg, lead.telefone, fill(aset.remind_1d_text, lead, a))
-          if (r.ok) result.reminders_1d = (result.reminders_1d as number) + 1
+          if (r.ok) {
+            result.reminders_1d = (result.reminders_1d as number) + 1
+            await admin.from('notifications').insert({
+              user_id: a.vendedor_id, type: 'automation', lead_id: a.lead_id,
+              title: 'Lembrete enviado',
+              body: 'Lembrete (1 dia antes) enviado para ' + (lead.nome || 'o lead') + '.',
+            })
+          }
         }
         await admin.from('appointments')
           .update({ reminder_1d_sent_at: new Date().toISOString() }).eq('id', a.id)
@@ -127,7 +142,14 @@ Deno.serve(async (req) => {
         const lead = (a as any).leads
         if (lead && lead.telefone) {
           const r = await sendWhatsApp(cfg, lead.telefone, fill(aset.remind_1h_text, lead, a))
-          if (r.ok) result.reminders_1h = (result.reminders_1h as number) + 1
+          if (r.ok) {
+            result.reminders_1h = (result.reminders_1h as number) + 1
+            await admin.from('notifications').insert({
+              user_id: a.vendedor_id, type: 'automation', lead_id: a.lead_id,
+              title: 'Lembrete enviado',
+              body: 'Lembrete (1 hora antes) enviado para ' + (lead.nome || 'o lead') + '.',
+            })
+          }
         }
         await admin.from('appointments')
           .update({ reminder_1h_sent_at: new Date().toISOString() }).eq('id', a.id)

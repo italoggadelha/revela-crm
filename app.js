@@ -44,6 +44,8 @@
     taskFilter: 'pending',
     // Playbook
     playbookTab: '',
+    // Notificações
+    notifications: [],
     // Configurações
     settingsSection: 'profile',
     // Agenda
@@ -354,8 +356,9 @@
     applyNavPermissions();
 
     // Load tudo
-    Promise.all([loadPipeline(), loadProfiles(), loadLeads(), loadConversations(), loadTasks(), loadAppointments(), loadScheduledMessages()]).then(() => {
+    Promise.all([loadPipeline(), loadProfiles(), loadLeads(), loadConversations(), loadTasks(), loadAppointments(), loadScheduledMessages(), loadNotifications()]).then(() => {
       renderAll();
+      renderNotifications();
       subscribeRealtime();
       // Garante que a view atual é uma permitida
       ensureValidView();
@@ -528,6 +531,13 @@
       .on('postgres_changes', { event: '*', schema: 'public', table: 'scheduled_messages' }, async () => {
         await loadScheduledMessages();
         if (state.currentView === 'automacoes') renderSchedMsgList();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, async (payload) => {
+        await loadNotifications();
+        renderNotifications();
+        if (payload.eventType === 'INSERT' && payload.new && !payload.new.read) {
+          toast('🔔 ' + payload.new.title, 'success');
+        }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, async () => {
         await loadProfiles();
@@ -1377,6 +1387,8 @@
       if (dueToday > 0) { badge.textContent = dueToday; badge.style.display = ''; }
       else badge.style.display = 'none';
     }
+    const tt = $('topbar-tasks-count');
+    if (tt) tt.textContent = dueToday;
   }
 
   function taskRowHTML(t) {
@@ -2050,6 +2062,48 @@
       const el = $(id);
       if (el) el.style.display = (sec === section) ? '' : 'none';
     });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // NOTIFICAÇÕES
+  // ═══════════════════════════════════════════════════════════════════
+  async function loadNotifications() {
+    const { data } = await supabase.from('notifications')
+      .select('*').order('created_at', { ascending: false }).limit(30);
+    state.notifications = data || [];
+  }
+
+  function renderNotifications() {
+    const unread = state.notifications.filter(n => !n.read).length;
+    const badge = $('topbar-bell-badge');
+    if (badge) {
+      if (unread > 0) { badge.textContent = unread > 99 ? '99+' : unread; badge.style.display = ''; }
+      else badge.style.display = 'none';
+    }
+    const list = $('notif-list');
+    if (!list) return;
+    if (!state.notifications.length) {
+      list.innerHTML = '<div class="notif-empty">Nenhuma notificação ainda.</div>';
+      return;
+    }
+    const ic = { task: '📋', pipeline: '🔄', sale: '🎉', automation: '⚡' };
+    list.innerHTML = state.notifications.map(n => `
+      <div class="notif-item ${n.read ? '' : 'unread'}" data-notif="${n.id}" data-lead="${n.lead_id || ''}">
+        <span class="notif-ic">${ic[n.type] || '🔔'}</span>
+        <div class="notif-main">
+          <div class="notif-title">${escapeHtml(n.title)}</div>
+          ${n.body ? `<div class="notif-body">${escapeHtml(n.body)}</div>` : ''}
+          <div class="notif-time">${relativeTime(n.created_at)}</div>
+        </div>
+      </div>`).join('');
+  }
+
+  async function markAllNotifsRead() {
+    const ids = state.notifications.filter(n => !n.read).map(n => n.id);
+    if (!ids.length) return;
+    state.notifications.forEach(n => { n.read = true; });
+    renderNotifications();
+    await supabase.from('notifications').update({ read: true }).in('id', ids);
   }
 
   function renderSettings() {
@@ -3181,6 +3235,31 @@
     $$('.nav-item').forEach(b => {
       b.addEventListener('click', () => switchView(b.dataset.view));
     });
+
+    // Notificações
+    $('topbar-bell').addEventListener('click', e => {
+      e.stopPropagation();
+      $('notif-panel').classList.toggle('open');
+    });
+    document.addEventListener('click', e => {
+      if (!e.target.closest('.topbar-bell-wrap')) $('notif-panel').classList.remove('open');
+    });
+    $('notif-readall').addEventListener('click', markAllNotifsRead);
+    $('notif-list').addEventListener('click', e => {
+      const item = e.target.closest('[data-notif]');
+      if (!item) return;
+      const n = state.notifications.find(x => x.id === item.dataset.notif);
+      if (n && !n.read) {
+        n.read = true;
+        renderNotifications();
+        supabase.from('notifications').update({ read: true }).eq('id', n.id);
+      }
+      if (item.dataset.lead) {
+        $('notif-panel').classList.remove('open');
+        openLeadModal(item.dataset.lead);
+      }
+    });
+    $('topbar-tasks').addEventListener('click', () => switchView('tasks'));
 
     // Busca
     $('search-input').addEventListener('input', e => {
