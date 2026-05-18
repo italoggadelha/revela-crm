@@ -58,12 +58,25 @@ Deno.serve(async (req) => {
   if (body.action === 'accept') {
     const d = body.data || {}
     if (!d.nome || !d.email) return json({ error: 'Preencha ao menos nome e e-mail' }, 400)
+    const { data: prop } = await admin.from('proposals')
+      .select('lead_id').eq('id', id).maybeSingle()
     const { error } = await admin.from('proposals').update({
       accepted_data: d,
       status: 'accepted',
       accepted_at: new Date().toISOString(),
     }).eq('id', id)
     if (error) return json({ error: error.message }, 500)
+    // Aceite → move o lead para a etapa de venda realizada
+    if (prop && prop.lead_id) {
+      const { data: pc } = await admin.from('pipeline_config')
+        .select('columns').eq('id', 1).maybeSingle()
+      const cols = (pc && pc.columns) || []
+      const stage = cols.find((c: any) => c.id === 'vendida')
+        || cols.find((c: any) => /vend/i.test(c.label || ''))
+      if (stage) {
+        await admin.from('leads').update({ pipeline_status: stage.id }).eq('id', prop.lead_id)
+      }
+    }
     return json({ ok: true })
   }
 

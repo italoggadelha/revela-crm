@@ -6,185 +6,244 @@
 <title>Proposta Comercial · MyLion</title>
 <meta name="robots" content="noindex">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Lora:wght@600;700&display=swap" rel="stylesheet">
 <style>
-  :root{ --accent:#0F766E; --accent2:#14B8A6; --ink:#1A2B33; --muted:#5B6B72;
-    --bg:#F4F6F6; --line:#E4E8E8; }
+  :root{ --lime:#C5F03C; --teal:#14B8A6; --bg:#0C0F12; --bg2:#14181D;
+    --ink:#F4F6F4; --muted:#9BA6A4; --line:#262C31; }
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--ink);line-height:1.6}
-  .wrap{max-width:760px;margin:0 auto;padding:0 0 60px}
-  .pp-loading,.pp-error{padding:80px 30px;text-align:center;color:var(--muted)}
+  html,body{height:100%}
+  body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--ink);overflow:hidden}
+  .pp-load,.pp-err{display:flex;height:100vh;align-items:center;justify-content:center;
+    color:var(--muted);font-size:15px;padding:30px;text-align:center}
 
-  /* Capa */
-  .pp-hero{
-    background:linear-gradient(135deg,#0F766E 0%,#0D9488 55%,#14B8A6 100%);
-    color:#fff;padding:60px 44px 52px;text-align:center}
-  .pp-brand{font-weight:800;letter-spacing:.16em;font-size:13px;opacity:.85}
-  .pp-hero h1{font-family:'Lora',serif;font-size:38px;font-weight:700;margin:18px 0 6px}
-  .pp-hero .pp-for{font-size:16px;opacity:.92}
-  .pp-hero .pp-meta{font-size:12.5px;opacity:.7;margin-top:18px}
+  .deck{position:fixed;inset:0;overflow:hidden}
+  .slide{position:absolute;inset:0;display:flex;flex-direction:column;
+    justify-content:center;padding:7vh 9vw;opacity:0;pointer-events:none;
+    transition:opacity .45s ease, transform .45s ease;transform:translateY(14px)}
+  .slide.active{opacity:1;pointer-events:auto;transform:translateY(0)}
+  .slide.cover{align-items:center;text-align:center}
 
-  /* Seções */
-  .pp-sec{background:#fff;margin:18px 22px 0;border:1px solid var(--line);
-    border-radius:18px;padding:30px 32px}
-  .pp-kicker{font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
-    color:var(--accent)}
-  .pp-sec h2{font-family:'Lora',serif;font-size:24px;font-weight:700;margin:6px 0 14px}
-  .pp-sec p{font-size:14.5px;color:var(--muted);margin:9px 0}
-  .pp-sec p strong{color:var(--ink)}
+  .kicker{font-size:13px;font-weight:800;letter-spacing:.22em;text-transform:uppercase;
+    color:var(--lime)}
+  h1{font-family:'Lora',serif;font-weight:700;font-size:clamp(34px,6vw,68px);line-height:1.08;
+    margin:18px 0}
+  h2{font-family:'Lora',serif;font-weight:700;font-size:clamp(28px,4.4vw,46px);line-height:1.12;
+    margin:14px 0 20px}
+  .lead{font-size:clamp(16px,1.9vw,21px);color:var(--muted);line-height:1.6;max-width:760px}
+  .big{font-size:clamp(18px,2.3vw,26px);color:var(--ink);line-height:1.55;max-width:820px;font-weight:500}
+  .cover .brand{font-family:'Inter';font-weight:900;letter-spacing:.3em;font-size:15px;color:var(--lime)}
+  .cover .who{margin-top:26px;font-size:14px;color:var(--muted)}
+  .accent{color:var(--lime)}
 
-  /* Entregas */
-  .pp-deliv{display:flex;flex-direction:column;gap:10px;margin-top:6px}
-  .pp-deliv-item{display:flex;gap:13px;align-items:flex-start;
-    background:#F0FDFA;border:1px solid #CCFBF1;border-radius:13px;padding:14px 16px}
-  .pp-check{width:24px;height:24px;flex-shrink:0;border-radius:50%;
-    background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;
-    font-size:14px;font-weight:800}
-  .pp-deliv-item span{font-size:14.5px;font-weight:600;color:var(--ink);padding-top:1px}
+  /* listas e cards */
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;
+    margin-top:10px;max-width:900px}
+  .card{background:var(--bg2);border:1px solid var(--line);border-radius:16px;padding:22px 24px}
+  .card .n{font-family:'Lora',serif;font-size:30px;color:var(--lime);font-weight:700}
+  .card h3{font-size:16px;margin:8px 0 5px}
+  .card p{font-size:13.5px;color:var(--muted);line-height:1.55}
+  .deliv{display:flex;flex-direction:column;gap:11px;margin-top:8px;max-width:760px}
+  .deliv-row{display:flex;gap:14px;align-items:center;background:var(--bg2);
+    border:1px solid var(--line);border-radius:13px;padding:15px 18px}
+  .deliv-row .ck{width:28px;height:28px;flex-shrink:0;border-radius:50%;background:var(--lime);
+    color:#14180A;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:15px}
+  .deliv-row span{font-size:15.5px;font-weight:600}
+  .money{background:linear-gradient(135deg,var(--teal),#0F766E);border-radius:20px;
+    padding:32px 36px;max-width:680px;margin-top:8px}
+  .money .v{font-size:clamp(20px,2.6vw,30px);font-weight:700;white-space:pre-wrap;line-height:1.5}
 
-  /* Investimento */
-  .pp-invest{background:linear-gradient(135deg,#0F766E,#14B8A6);color:#fff;
-    border-radius:14px;padding:24px 26px;margin-top:8px}
-  .pp-invest .pp-kicker{color:rgba(255,255,255,.8)}
-  .pp-invest p{color:#fff;font-size:16px;white-space:pre-wrap;margin-top:6px}
+  /* navegação */
+  .nav{position:fixed;top:50%;transform:translateY(-50%);width:54px;height:54px;
+    border-radius:50%;background:rgba(255,255,255,.07);border:1px solid var(--line);
+    color:var(--ink);font-size:24px;cursor:pointer;display:flex;align-items:center;
+    justify-content:center;transition:.15s;z-index:20}
+  .nav:hover{background:var(--lime);color:#14180A;border-color:var(--lime)}
+  .nav:disabled{opacity:.25;cursor:default}
+  .nav.prev{left:22px}.nav.next{right:22px}
+  .dots{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);display:flex;
+    gap:7px;z-index:20}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--line);cursor:pointer;transition:.15s}
+  .dot.on{background:var(--lime);width:22px;border-radius:4px}
+  .count{position:fixed;bottom:18px;right:24px;font-size:12px;color:var(--muted);z-index:20}
+  .pp-brandtag{position:fixed;top:20px;left:26px;font-weight:900;letter-spacing:.2em;
+    font-size:12px;color:var(--muted);z-index:20}
 
-  /* Aceite */
-  .pp-accept{background:#fff;margin:18px 22px 0;border:2px solid var(--accent);
-    border-radius:18px;padding:30px 32px}
-  .pp-field{margin-top:13px}
-  .pp-field label{font-size:12.5px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px}
-  .pp-field input{width:100%;border:1px solid var(--line);border-radius:10px;
-    padding:11px 13px;font-size:14px;font-family:inherit;color:var(--ink)}
-  .pp-field input:focus{outline:none;border-color:var(--accent)}
-  .pp-grid2{display:grid;grid-template-columns:1fr 1fr;gap:13px}
-  .pp-btn{width:100%;margin-top:20px;background:linear-gradient(135deg,#0D9488,#0F766E);
-    color:#fff;border:none;border-radius:12px;padding:16px;font-size:16px;font-weight:700;
-    cursor:pointer;font-family:inherit}
-  .pp-btn:hover{filter:brightness(1.08)}
-  .pp-btn:disabled{opacity:.5;cursor:not-allowed}
-  .pp-msg{font-size:13px;margin-top:12px;text-align:center;color:#DC2626}
-  .pp-done{background:#fff;margin:18px 22px;border-radius:18px;padding:60px 32px;text-align:center}
-  .pp-done .ic{font-size:54px}
-  .pp-done h2{font-family:'Lora',serif;font-size:26px;margin:14px 0 8px}
-  .pp-done p{font-size:14.5px;color:var(--muted)}
-  .pp-foot{text-align:center;font-size:11px;color:#9AA7AB;padding:24px}
-  @media(max-width:560px){
-    .pp-hero{padding:44px 24px 38px}.pp-hero h1{font-size:30px}
-    .pp-sec,.pp-accept{margin:14px 14px 0;padding:24px 20px}
-    .pp-grid2{grid-template-columns:1fr}
+  /* aceite */
+  .ac-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:620px;margin-top:6px}
+  .ac-f label{font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px}
+  .ac-f input{width:100%;background:var(--bg2);border:1px solid var(--line);border-radius:10px;
+    padding:12px 13px;font-size:14px;font-family:inherit;color:var(--ink)}
+  .ac-f input:focus{outline:none;border-color:var(--lime)}
+  .ac-btn{margin-top:20px;background:var(--lime);color:#14180A;border:none;border-radius:13px;
+    padding:17px 40px;font-size:17px;font-weight:800;cursor:pointer;font-family:inherit}
+  .ac-btn:hover{filter:brightness(1.06)}.ac-btn:disabled{opacity:.5;cursor:default}
+  .ac-msg{font-size:13px;color:#FCA5A5;margin-top:12px}
+  @media(max-width:640px){
+    .slide{padding:8vh 7vw}.nav{width:44px;height:44px;font-size:20px}
+    .nav.prev{left:8px}.nav.next{right:8px}.ac-grid{grid-template-columns:1fr}
   }
 </style>
 </head>
 <body>
-<div class="wrap" id="pp-root"><div class="pp-loading">Carregando proposta…</div></div>
+<div id="pp-root"><div class="pp-load">Carregando proposta…</div></div>
 
 <script src="./config.js"></script>
 <script>
 (function(){
   'use strict';
-  var FN = (window.CRM_CONFIG && window.CRM_CONFIG.SUPABASE_URL || '') + '/functions/v1/proposal';
-  var ID = new URLSearchParams(location.search).get('id');
-  var root = document.getElementById('pp-root');
+  var FN=(window.CRM_CONFIG&&window.CRM_CONFIG.SUPABASE_URL||'')+'/functions/v1/proposal';
+  var ID=new URLSearchParams(location.search).get('id');
+  var root=document.getElementById('pp-root');
+  var idx=0, slides=[];
 
-  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){
-    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
-  function api(payload){
-    return fetch(FN,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(Object.assign({id:ID},payload))}).then(function(r){return r.json();});
-  }
+  function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+  function api(p){return fetch(FN,{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(Object.assign({id:ID},p))}).then(function(r){return r.json();});}
 
-  if(!ID){ root.innerHTML='<div class="pp-error">Proposta inválida.</div>'; return; }
-
+  if(!ID){root.innerHTML='<div class="pp-err">Proposta inválida.</div>';return;}
   api({action:'get'}).then(function(p){
-    if(p.error){ root.innerHTML='<div class="pp-error">'+esc(p.error)+'</div>'; return; }
-    render(p);
-  }).catch(function(){ root.innerHTML='<div class="pp-error">Não foi possível carregar a proposta.</div>'; });
+    if(p.error){root.innerHTML='<div class="pp-err">'+esc(p.error)+'</div>';return;}
+    build(p);
+  }).catch(function(){root.innerHTML='<div class="pp-err">Não foi possível carregar a proposta.</div>';});
 
-  // Texto de abertura, montado a partir do nicho e das entregas
-  function intro(p){
-    var nicho = p.client_niche ? ('no mercado de '+p.client_niche) : 'no seu mercado';
-    return 'Para crescer '+nicho+' com previsibilidade, não basta esforço — é preciso método. '+
-      'Esta proposta foi desenhada sob medida para '+(p.client_name||'a sua empresa')+
-      ', combinando estratégia, execução e acompanhamento próximo para transformar a sua '+
-      'captação de clientes em um processo consistente e escalável.';
+  function build(p){
+    var nicho=p.client_niche||'o seu mercado';
+    var deliv=(p.deliverables||[]).map(function(d){
+      return '<div class="deliv-row"><span class="ck">✓</span><span>'+esc(d)+'</span></div>';}).join('');
+
+    slides=[
+      // 1 — capa
+      '<div class="slide cover active"><div class="brand">MYLION</div>'+
+        '<h1>Proposta<br>Comercial</h1>'+
+        '<div class="lead">Um plano sob medida para '+esc(p.client_name||'a sua empresa')+' crescer com previsibilidade.</div>'+
+        '<div class="who">Apresentado por '+esc(p.vendedor)+' · '+new Date(p.created_at).toLocaleDateString('pt-BR')+'</div></div>',
+      // 2 — o desafio
+      '<div class="slide"><div class="kicker">O seu momento</div>'+
+        '<h2>Onde você está hoje</h2>'+
+        '<div class="big">'+esc(p.client_context||'Você quer crescer — mas falta um processo previsível de aquisição de clientes.').replace(/\n/g,'<br>')+'</div></div>',
+      // 3 — o que podemos fazer
+      '<div class="slide"><div class="kicker">A solução</div>'+
+        '<h2>O que podemos fazer por você</h2>'+
+        '<div class="grid">'+
+        card('🎯','Atrair','Levar até você as pessoas certas, de forma constante — não por sorte.')+
+        card('⚙️','Estruturar','Montar um funil de vendas que transforma interesse em cliente.')+
+        card('📈','Escalar','Crescer com método e dados, sem depender só de indicação.')+
+        '</div></div>',
+      // 4 — mercado
+      '<div class="slide"><div class="kicker">O mercado</div>'+
+        '<h2>O momento de '+esc(nicho)+'</h2>'+
+        '<div class="big">O mercado está aquecido e competitivo. Quem cresce não é quem trabalha mais — é quem tem um processo de aquisição <span class="accent">previsível</span>. '+
+        'Hoje a maioria dos negócios do setor ainda depende de indicação e sorte. Existe uma janela clara para quem se estrutura primeiro.</div></div>',
+      // 5 — metodologia
+      '<div class="slide"><div class="kicker">Como funciona</div>'+
+        '<h2>Nossa metodologia</h2>'+
+        '<div class="grid">'+
+        stepc('01','Diagnóstico','Entendemos o seu negócio, suas metas e seus números.')+
+        stepc('02','Estratégia','Desenhamos o funil, a oferta e os canais de aquisição.')+
+        stepc('03','Execução','Colocamos no ar: tráfego, conteúdo, automações e CRM.')+
+        stepc('04','Otimização','Acompanhamos os números e melhoramos mês a mês.')+
+        '</div></div>',
+      // 6 — entregas
+      '<div class="slide"><div class="kicker">Escopo</div>'+
+        '<h2>O que vamos entregar</h2>'+
+        '<div class="deliv">'+(deliv||'<div class="big">A combinar.</div>')+'</div></div>',
+      // 7 — diferenciais
+      '<div class="slide"><div class="kicker">Por que a MyLion</div>'+
+        '<h2>O que nos torna diferentes</h2>'+
+        '<div class="grid">'+
+        card('🔍','Foco em ROI','Cada R$ investido é medido. O objetivo é retorno, não vaidade.')+
+        card('🤝','Time próximo','Acompanhamento de verdade — você não fica sozinho.')+
+        card('🧩','Tudo integrado','Tráfego, conteúdo, CRM e automações falando a mesma língua.')+
+        '</div></div>',
+      // 8 — resultados
+      '<div class="slide"><div class="kicker">O que esperar</div>'+
+        '<h2>Resultados que buscamos</h2>'+
+        '<div class="big">Uma agenda mais cheia e <span class="accent">previsível</span>, um custo de aquisição sob controle e um processo comercial que continua funcionando — com ou sem você na operação do dia a dia.</div></div>',
+      // 9 — financeiro
+      '<div class="slide"><div class="kicker">Investimento</div>'+
+        '<h2>Proposta financeira</h2>'+
+        '<div class="money"><div class="v">'+esc(p.payment||'A combinar')+'</div></div></div>',
+      // 10 — pitch final
+      '<div class="slide cover"><div class="kicker">Vamos juntos?</div>'+
+        '<h1>Sua máquina de<br>vendas começa <span class="accent">agora</span></h1>'+
+        '<div class="lead">Você pode continuar dependendo da sorte — ou construir um processo previsível. '+
+        'A MyLion já fez isso por outros negócios. Vamos fazer pelo seu.</div></div>',
+      // 11 — aceite
+      acceptSlide(p)
+    ];
+    render(p);
   }
+  function card(ic,t,d){return '<div class="card"><div style="font-size:26px">'+ic+'</div>'+
+    '<h3>'+t+'</h3><p>'+d+'</p></div>';}
+  function stepc(n,t,d){return '<div class="card"><div class="n">'+n+'</div>'+
+    '<h3>'+t+'</h3><p>'+d+'</p></div>';}
+  function acceptSlide(p){
+    if(p.status==='accepted')
+      return '<div class="slide cover"><div style="font-size:60px">✅</div>'+
+        '<h2>Proposta aceita</h2><div class="lead">Esta proposta já foi aceita. Em breve entramos em contato com o contrato.</div></div>';
+    return '<div class="slide"><div class="kicker">Aceite</div>'+
+      '<h2>Vamos começar?</h2>'+
+      '<div class="lead" style="margin-bottom:6px">Preencha seus dados para aceitar a proposta — usaremos para o contrato.</div>'+
+      '<div class="ac-grid">'+
+        acf('ac-nome','Nome completo *')+acf('ac-doc','CPF / CNPJ')+
+        acf('ac-email','E-mail *')+acf('ac-tel','Telefone')+
+        acf('ac-empresa','Empresa')+acf('ac-end','Endereço')+
+      '</div>'+
+      '<button class="ac-btn" id="ac-btn">Aceitar proposta ✓</button>'+
+      '<div class="ac-msg" id="ac-msg"></div></div>';
+  }
+  function acf(id,lb){return '<div class="ac-f"><label>'+lb+'</label><input id="'+id+'"></div>';}
 
   function render(p){
-    var deliv = (p.deliverables||[]).map(function(d){
-      return '<div class="pp-deliv-item"><span class="pp-check">✓</span><span>'+esc(d)+'</span></div>';
-    }).join('') || '<p>—</p>';
-    var ctx = p.client_context
-      ? '<p>'+esc(p.client_context).replace(/\n/g,'<br>')+'</p>' : '';
-    var html =
-      '<div class="pp-hero">'+
-        '<div class="pp-brand">MYLION</div>'+
-        '<h1>Proposta Comercial</h1>'+
-        '<div class="pp-for">preparada para '+esc(p.client_name||'você')+'</div>'+
-        '<div class="pp-meta">Apresentado por '+esc(p.vendedor)+' · '+
-          new Date(p.created_at).toLocaleDateString('pt-BR')+'</div>'+
-      '</div>'+
-      '<div class="pp-sec"><div class="pp-kicker">Sobre o projeto</div>'+
-        '<h2>'+esc(p.client_name||'Seu projeto')+'</h2>'+
-        '<p>'+esc(intro(p))+'</p>'+ ctx +'</div>'+
-      '<div class="pp-sec"><div class="pp-kicker">Escopo</div>'+
-        '<h2>O que vamos entregar</h2><div class="pp-deliv">'+deliv+'</div></div>'+
-      (p.payment ? '<div class="pp-sec"><div class="pp-invest"><div class="pp-kicker">Investimento</div>'+
-        '<p>'+esc(p.payment)+'</p></div></div>' : '')+
-      (p.status==='accepted'
-        ? '<div class="pp-done"><div class="ic">✅</div><h2>Proposta aceita</h2>'+
-          '<p>Esta proposta já foi aceita. Em breve entraremos em contato com o contrato.</p></div>'
-        : acceptForm());
-    root.innerHTML = html;
-    if(p.status!=='accepted') wireAccept();
+    root.innerHTML='<div class="pp-brandtag">MYLION</div><div class="deck" id="deck">'+slides.join('')+'</div>'+
+      '<button class="nav prev" id="nav-prev">‹</button>'+
+      '<button class="nav next" id="nav-next">›</button>'+
+      '<div class="dots" id="dots"></div><div class="count" id="count"></div>';
+    var dots='';for(var i=0;i<slides.length;i++)dots+='<span class="dot" data-i="'+i+'"></span>';
+    document.getElementById('dots').innerHTML=dots;
+    document.getElementById('nav-prev').onclick=function(){go(idx-1);};
+    document.getElementById('nav-next').onclick=function(){go(idx+1);};
+    document.querySelectorAll('.dot').forEach(function(d){d.onclick=function(){go(+d.dataset.i);};});
+    document.addEventListener('keydown',function(e){
+      if(e.key==='ArrowRight')go(idx+1);if(e.key==='ArrowLeft')go(idx-1);});
+    go(0);
+    var b=document.getElementById('ac-btn');
+    if(b)b.onclick=function(){accept(p);};
   }
-
-  function acceptForm(){
-    return '<div class="pp-accept"><div class="pp-kicker">Aceite</div>'+
-      '<h2>Vamos começar?</h2>'+
-      '<p style="font-size:14px;color:var(--muted);margin:6px 0 4px">'+
-      'Preencha seus dados abaixo para aceitar a proposta. Usaremos essas informações para a confecção do contrato.</p>'+
-      '<div class="pp-field"><label>Nome completo *</label><input id="ac-nome"></div>'+
-      '<div class="pp-grid2">'+
-        '<div class="pp-field"><label>CPF / CNPJ</label><input id="ac-doc"></div>'+
-        '<div class="pp-field"><label>Empresa</label><input id="ac-empresa"></div>'+
-      '</div>'+
-      '<div class="pp-grid2">'+
-        '<div class="pp-field"><label>E-mail *</label><input id="ac-email" type="email"></div>'+
-        '<div class="pp-field"><label>Telefone</label><input id="ac-tel"></div>'+
-      '</div>'+
-      '<div class="pp-field"><label>Endereço</label><input id="ac-end"></div>'+
-      '<button class="pp-btn" id="ac-btn">Aceitar proposta</button>'+
-      '<div class="pp-msg" id="ac-msg"></div></div>'+
-      '<div class="pp-foot">MyLion · CRM</div>';
+  function go(i){
+    if(i<0||i>=slides.length)return;
+    idx=i;
+    var sl=document.querySelectorAll('.slide');
+    sl.forEach(function(s,k){s.classList.toggle('active',k===i);});
+    document.querySelectorAll('.dot').forEach(function(d,k){d.classList.toggle('on',k===i);});
+    document.getElementById('nav-prev').disabled=i===0;
+    document.getElementById('nav-next').disabled=i===slides.length-1;
+    document.getElementById('count').textContent=(i+1)+' / '+slides.length;
   }
-
-  function wireAccept(){
-    document.getElementById('ac-btn').onclick=function(){
-      var d={
-        nome:val('ac-nome'), doc:val('ac-doc'), empresa:val('ac-empresa'),
-        email:val('ac-email'), telefone:val('ac-tel'), endereco:val('ac-end')
-      };
-      var msg=document.getElementById('ac-msg');
-      if(!d.nome||!d.email){ msg.textContent='Preencha nome e e-mail.'; return; }
-      var btn=document.getElementById('ac-btn');
-      btn.disabled=true; btn.textContent='Enviando…';
-      api({action:'accept',data:d}).then(function(r){
-        if(r.ok){
-          root.innerHTML='<div class="pp-done"><div class="ic">🎉</div>'+
-            '<h2>Proposta aceita!</h2><p>Obrigado, '+esc(d.nome.split(' ')[0])+'! '+
-            'Recebemos o seu aceite e vamos preparar o contrato. Em breve entramos em contato.</p></div>'+
-            '<div class="pp-foot">MyLion · CRM</div>';
-        } else {
-          btn.disabled=false; btn.textContent='Aceitar proposta';
-          msg.textContent=r.error||'Não foi possível registrar o aceite.';
-        }
-      }).catch(function(){
-        btn.disabled=false; btn.textContent='Aceitar proposta';
-        msg.textContent='Erro de conexão. Tente de novo.';
-      });
-    };
+  function accept(p){
+    var d={nome:v('ac-nome'),doc:v('ac-doc'),email:v('ac-email'),
+      telefone:v('ac-tel'),empresa:v('ac-empresa'),endereco:v('ac-end')};
+    var msg=document.getElementById('ac-msg');
+    if(!d.nome||!d.email){msg.textContent='Preencha nome e e-mail.';return;}
+    var btn=document.getElementById('ac-btn');
+    btn.disabled=true;btn.textContent='Enviando…';
+    api({action:'accept',data:d}).then(function(r){
+      if(r.ok){
+        root.innerHTML='<div class="deck"><div class="slide cover active">'+
+          '<div style="font-size:64px">🎉</div><h1>Proposta aceita!</h1>'+
+          '<div class="lead">Obrigado, '+esc(d.nome.split(' ')[0])+'! Recebemos o seu aceite. '+
+          'Vamos preparar o contrato e entrar em contato em breve.</div></div></div>';
+      }else{
+        btn.disabled=false;btn.textContent='Aceitar proposta ✓';
+        msg.textContent=r.error||'Não foi possível registrar o aceite.';
+      }
+    }).catch(function(){
+      btn.disabled=false;btn.textContent='Aceitar proposta ✓';
+      msg.textContent='Erro de conexão. Tente de novo.';
+    });
   }
-  function val(id){ return (document.getElementById(id).value||'').trim(); }
+  function v(id){return (document.getElementById(id).value||'').trim();}
 })();
 </script>
 </body>
