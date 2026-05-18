@@ -1281,8 +1281,25 @@
         <textarea class="notes-textarea" id="proposta-extra" placeholder="Entregas adicionais, fora da lista acima..."></textarea>
       </div>
       <div class="field-block">
-        <label class="field-block-label">Forma de pagamento e valores *</label>
-        <textarea class="notes-textarea" id="proposta-payment" placeholder="Ex: R$ 5.000 de setup + R$ 2.500/mês por 6 meses..."></textarea>
+        <label class="field-block-label">Valores do investimento</label>
+        <div class="appt-time-grid">
+          <div class="field-block">
+            <label class="ci-label">Setup (R$)</label>
+            <input type="number" class="input-text" id="proposta-setup" placeholder="0" step="0.01" min="0">
+          </div>
+          <div class="field-block">
+            <label class="ci-label">Mensalidade (R$)</label>
+            <input type="number" class="input-text" id="proposta-monthly" placeholder="0" step="0.01" min="0">
+          </div>
+          <div class="field-block">
+            <label class="ci-label">Duração (meses)</label>
+            <input type="number" class="input-text" id="proposta-months" placeholder="0" min="0">
+          </div>
+        </div>
+      </div>
+      <div class="field-block">
+        <label class="field-block-label">Condições de pagamento</label>
+        <textarea class="notes-textarea" id="proposta-payment" placeholder="Ex: setup à vista, mensalidade no cartão, reajuste anual..."></textarea>
       </div>
       <div class="field-block">
         <label class="field-block-label">Transcrição da reunião (opcional)</label>

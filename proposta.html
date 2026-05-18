@@ -7,152 +7,166 @@
 <meta name="robots" content="noindex">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  :root{ --lime:#C5F03C; --teal:#2DD4BF; --bg:#0A0D10; --bg2:#13181D;
-    --ink:#F2F5F3; --muted:#94A0A0; --line:#252C32;
-    --fd:'Sora',sans-serif; --fb:'Inter',sans-serif; }
+  :root{
+    --bg:#0A0B0D; --panel:#121417; --ink:#ECEDEA; --soft:#B4B8B4; --muted:#7E837F;
+    --line:rgba(255,255,255,.08); --line2:rgba(255,255,255,.14);
+    --gold:#C8A86A; --teal:#5BD3C0;
+    --fd:'Fraunces',Georgia,serif; --fb:'Inter',sans-serif;
+    --ease:cubic-bezier(.22,.61,.36,1);
+  }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
   body{
     font-family:var(--fb);color:var(--ink);overflow:hidden;
     background:
-      radial-gradient(38vw 38vw at 8% 4%, rgba(45,212,191,.20), transparent 72%),
-      radial-gradient(40vw 40vw at 94% 98%, rgba(197,240,60,.16), transparent 72%),
-      radial-gradient(60vw 50vw at 50% 50%, rgba(255,255,255,.018), transparent 70%),
+      radial-gradient(46vw 46vw at 6% 0%, rgba(91,211,192,.10), transparent 70%),
+      radial-gradient(44vw 44vw at 96% 100%, rgba(200,168,106,.10), transparent 70%),
       var(--bg);
   }
-  /* textura pontilhada + vinheta nas pontas */
-  body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
-    background-image:radial-gradient(rgba(255,255,255,.028) 1px,transparent 1px);
-    background-size:28px 28px}
-  body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
-    box-shadow:inset 0 0 200px 60px rgba(0,0,0,.55)}
+  body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+    background-image:radial-gradient(rgba(255,255,255,.022) 1px,transparent 1px);
+    background-size:34px 34px}
+  body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+    box-shadow:inset 0 0 260px 90px rgba(0,0,0,.6)}
   .pp-load,.pp-err{display:flex;height:100vh;align-items:center;justify-content:center;
     color:var(--muted);font-size:15px;padding:30px;text-align:center;position:relative;z-index:2}
 
   .deck{position:fixed;inset:0;z-index:2}
   .slide{position:absolute;inset:0;display:flex;flex-direction:column;
-    align-items:center;justify-content:center;text-align:center;
-    padding:9vh 8vw;opacity:0;pointer-events:none;
-    transition:opacity .5s ease,transform .5s ease;transform:translateY(20px) scale(.99)}
-  .slide.active{opacity:1;pointer-events:auto;transform:translateY(0) scale(1)}
+    align-items:center;justify-content:center;text-align:center;padding:11vh 9vw;
+    opacity:0;pointer-events:none;transition:opacity .6s var(--ease)}
+  .slide.active{opacity:1;pointer-events:auto}
 
-  .kicker{display:inline-flex;align-items:center;gap:8px;font-family:var(--fd);
-    font-size:12px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;
-    color:var(--lime);padding:7px 15px;border:1px solid rgba(197,240,60,.3);
-    border-radius:30px;background:rgba(197,240,60,.06)}
-  h1{font-family:var(--fd);font-weight:800;font-size:clamp(38px,6.6vw,76px);line-height:1.04;
-    letter-spacing:-.02em;margin:22px 0 16px}
-  h2{font-family:var(--fd);font-weight:700;font-size:clamp(28px,4.6vw,50px);line-height:1.1;
-    letter-spacing:-.015em;margin:16px 0 22px}
-  .lead{font-size:clamp(16px,1.85vw,21px);color:var(--muted);line-height:1.62;max-width:680px}
-  .big{font-family:var(--fd);font-size:clamp(19px,2.4vw,29px);color:var(--ink);
-    line-height:1.5;max-width:840px;font-weight:500}
-  .accent{color:var(--lime)}
-  .cover .brand{display:inline-flex;align-items:center;gap:9px;font-family:var(--fd);
-    font-weight:800;letter-spacing:.26em;font-size:14px;color:var(--lime)}
-  .cover .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--lime);
-    box-shadow:0 0 14px var(--lime)}
-  .who{margin-top:30px;font-size:13.5px;color:var(--muted);font-family:var(--fd);letter-spacing:.04em}
+  /* animação de entrada por elemento */
+  .r{opacity:0;transform:translateY(22px)}
+  .slide.active .r{animation:rUp .8s var(--ease) forwards;
+    animation-delay:calc(.12s + var(--i,0)*.13s)}
+  @keyframes rUp{to{opacity:1;transform:translateY(0)}}
+
+  .kicker{display:inline-flex;align-items:center;gap:9px;font-family:var(--fb);
+    font-size:11.5px;font-weight:600;letter-spacing:.24em;text-transform:uppercase;
+    color:var(--gold)}
+  .kicker .ico{width:15px;height:15px}
+  .kicker .ln{width:26px;height:1px;background:var(--gold);opacity:.5}
+  h1{font-family:var(--fd);font-weight:500;font-size:clamp(40px,6.4vw,82px);line-height:1.06;
+    letter-spacing:-.015em;margin:24px 0 18px}
+  h2{font-family:var(--fd);font-weight:500;font-size:clamp(30px,4.6vw,52px);line-height:1.12;
+    letter-spacing:-.012em;margin:18px 0 16px}
+  .em{font-style:italic;color:var(--gold)}
+  .lead{font-size:clamp(15px,1.55vw,18px);color:var(--soft);line-height:1.75;max-width:660px;
+    font-weight:400}
+  .lead+.lead{margin-top:14px}
+  .big{font-family:var(--fd);font-weight:400;font-size:clamp(20px,2.3vw,30px);color:var(--ink);
+    line-height:1.5;max-width:840px}
+  .sub{font-size:13.5px;color:var(--muted);line-height:1.7;max-width:620px;margin-top:16px}
+
+  .cover .brand{display:inline-flex;align-items:center;gap:10px;font-family:var(--fb);
+    font-weight:700;letter-spacing:.32em;font-size:12.5px;color:var(--soft)}
+  .cover .brand .d{width:7px;height:7px;border-radius:50%;background:var(--teal);
+    box-shadow:0 0 12px var(--teal)}
+  .cover .rule{width:54px;height:1px;background:var(--line2);margin:30px 0 4px}
+  .who{font-size:12.5px;color:var(--muted);letter-spacing:.05em}
 
   .ico{display:inline-flex;align-items:center;justify-content:center}
   .ico svg{width:100%;height:100%;stroke:currentColor;fill:none;
-    stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+    stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
 
-  /* grid de cards */
-  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px;
-    margin-top:14px;max-width:960px;width:100%}
-  .card{background:linear-gradient(180deg,var(--bg2),rgba(19,24,29,.55));
-    border:1px solid var(--line);border-radius:20px;padding:26px 22px;text-align:center}
-  .card .chip{width:54px;height:54px;margin:0 auto 14px;border-radius:15px;
-    background:linear-gradient(135deg,rgba(45,212,191,.9),rgba(197,240,60,.85));
-    color:#0A0D10;padding:13px}
-  .card .n{font-family:var(--fd);font-size:34px;font-weight:800;color:var(--lime);
-    line-height:1;margin-bottom:8px}
-  .card h3{font-family:var(--fd);font-size:17px;font-weight:700;margin-bottom:6px}
-  .card p{font-size:13.5px;color:var(--muted);line-height:1.55}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(225px,1fr));gap:18px;
+    margin-top:20px;max-width:980px;width:100%}
+  .card{background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.012));
+    border:1px solid var(--line);border-radius:18px;padding:30px 24px;text-align:left}
+  .card .chip{width:46px;height:46px;border-radius:13px;margin-bottom:16px;padding:12px;
+    background:rgba(91,211,192,.1);border:1px solid rgba(91,211,192,.22);color:var(--teal)}
+  .card .n{font-family:var(--fd);font-size:13px;font-weight:600;letter-spacing:.16em;
+    color:var(--gold);margin-bottom:10px}
+  .card h3{font-family:var(--fd);font-weight:600;font-size:19px;margin-bottom:8px}
+  .card p{font-size:13.5px;color:var(--soft);line-height:1.62}
 
-  /* dashboard de stats */
-  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px;
-    margin-top:16px;max-width:880px;width:100%}
-  .stat{background:linear-gradient(180deg,var(--bg2),rgba(19,24,29,.4));
-    border:1px solid var(--line);border-radius:18px;padding:24px 18px}
-  .stat .v{font-family:var(--fd);font-size:clamp(30px,4vw,46px);font-weight:800;
-    background:linear-gradient(135deg,var(--teal),var(--lime));
-    -webkit-background-clip:text;background-clip:text;color:transparent;line-height:1}
-  .stat .l{font-size:12.5px;color:var(--muted);margin-top:8px;line-height:1.45}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;
+    margin-top:22px;max-width:860px;width:100%}
+  .stat{border:1px solid var(--line);border-radius:16px;padding:26px 18px;
+    background:linear-gradient(180deg,rgba(255,255,255,.03),transparent)}
+  .stat .v{font-family:var(--fd);font-weight:600;font-size:clamp(30px,3.6vw,44px);
+    color:var(--teal);line-height:1}
+  .stat .l{font-size:12px;color:var(--muted);margin-top:9px;line-height:1.5}
 
-  /* entregas */
-  .deliv{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:11px;
-    margin-top:12px;max-width:820px;width:100%}
-  .deliv-row{display:flex;gap:12px;align-items:center;text-align:left;
-    background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
-  .deliv-row .ck{width:30px;height:30px;flex-shrink:0;border-radius:9px;
-    background:linear-gradient(135deg,var(--teal),var(--lime));color:#0A0D10;padding:7px}
-  .deliv-row span{font-size:14.5px;font-weight:600}
+  .deliv{display:grid;grid-template-columns:repeat(auto-fit,minmax(248px,1fr));gap:10px;
+    margin-top:18px;max-width:820px;width:100%}
+  .deliv-row{display:flex;gap:13px;align-items:center;text-align:left;
+    background:rgba(255,255,255,.025);border:1px solid var(--line);border-radius:13px;
+    padding:15px 17px}
+  .deliv-row .ck{width:26px;height:26px;flex-shrink:0;border-radius:50%;padding:6px;
+    background:rgba(91,211,192,.12);border:1px solid rgba(91,211,192,.3);color:var(--teal)}
+  .deliv-row span{font-size:14px;font-weight:500}
 
-  .money{background:linear-gradient(135deg,rgba(45,212,191,.16),rgba(197,240,60,.12));
-    border:1px solid rgba(197,240,60,.3);border-radius:24px;padding:38px 44px;
-    max-width:680px;margin-top:8px}
-  .money .ico{width:42px;height:42px;color:var(--lime);margin-bottom:14px}
-  .money .v{font-family:var(--fd);font-size:clamp(21px,2.8vw,32px);font-weight:700;
-    white-space:pre-wrap;line-height:1.45}
+  /* investimento — dashboard de valores */
+  .money-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px;
+    margin-top:20px;max-width:760px;width:100%}
+  .money-card{border:1px solid var(--line);border-radius:18px;padding:26px 20px;
+    background:linear-gradient(180deg,rgba(255,255,255,.04),transparent)}
+  .money-card.total{border-color:rgba(200,168,106,.4);
+    background:linear-gradient(180deg,rgba(200,168,106,.12),transparent)}
+  .money-card .ml{font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--muted);margin-bottom:10px}
+  .money-card .mv{font-family:var(--fd);font-weight:600;font-size:clamp(22px,2.5vw,30px);
+    color:var(--ink);line-height:1.15}
+  .money-card.total .mv{color:var(--gold)}
+  .conditions{font-size:13px;color:var(--muted);line-height:1.7;max-width:600px;
+    margin-top:20px;white-space:pre-wrap}
 
   /* navegação */
-  .nav{position:fixed;top:50%;transform:translateY(-50%);width:56px;height:56px;
-    border-radius:50%;background:rgba(255,255,255,.06);border:1px solid var(--line);
-    color:var(--ink);cursor:pointer;display:flex;align-items:center;justify-content:center;
-    transition:.16s;z-index:20;backdrop-filter:blur(6px)}
-  .nav:hover:not(:disabled){background:var(--lime);color:#0A0D10;border-color:var(--lime);
-    transform:translateY(-50%) scale(1.08)}
-  .nav:disabled{opacity:.22;cursor:default}
-  .nav svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2.4;
+  .nav{position:fixed;top:50%;transform:translateY(-50%);width:52px;height:52px;
+    border-radius:50%;background:rgba(255,255,255,.04);border:1px solid var(--line2);
+    color:var(--soft);cursor:pointer;display:flex;align-items:center;justify-content:center;
+    transition:.2s var(--ease);z-index:20;backdrop-filter:blur(8px)}
+  .nav:hover:not(:disabled){background:var(--ink);color:var(--bg);transform:translateY(-50%) scale(1.07)}
+  .nav:disabled{opacity:.2;cursor:default}
+  .nav svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;
     stroke-linecap:round;stroke-linejoin:round}
-  .nav.prev{left:26px}.nav.next{right:26px}
-  .dots{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);display:flex;
-    gap:8px;z-index:20}
-  .dot{width:8px;height:8px;border-radius:50%;background:var(--line);cursor:pointer;transition:.18s}
-  .dot.on{background:var(--lime);width:26px;border-radius:4px;box-shadow:0 0 12px rgba(197,240,60,.6)}
-  .count{position:fixed;bottom:22px;right:28px;font-size:12px;color:var(--muted);
-    font-family:var(--fd);letter-spacing:.06em;z-index:20}
-  .brandtag{position:fixed;top:24px;left:30px;display:flex;align-items:center;gap:8px;
-    font-family:var(--fd);font-weight:800;letter-spacing:.22em;font-size:12px;
+  .nav.prev{left:28px}.nav.next{right:28px}
+  .dots{position:fixed;bottom:30px;left:50%;transform:translateX(-50%);display:flex;
+    gap:9px;z-index:20}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--line2);cursor:pointer;
+    transition:.25s var(--ease)}
+  .dot.on{background:var(--gold);width:24px;border-radius:3px}
+  .count{position:fixed;bottom:26px;right:30px;font-family:var(--fd);font-size:13px;
     color:var(--muted);z-index:20}
-  .brandtag .dot{width:7px;height:7px;border-radius:50%;background:var(--lime)}
+  .brandtag{position:fixed;top:26px;left:32px;display:flex;align-items:center;gap:9px;
+    font-weight:700;letter-spacing:.26em;font-size:11px;color:var(--muted);z-index:20}
+  .brandtag .d{width:6px;height:6px;border-radius:50%;background:var(--teal)}
 
   /* aceite */
-  .ac-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px;max-width:600px;
-    margin-top:8px;width:100%;text-align:left}
-  .ac-f label{font-family:var(--fd);font-size:11.5px;font-weight:600;color:var(--muted);
-    display:block;margin-bottom:5px;letter-spacing:.03em}
-  .ac-f input{width:100%;background:var(--bg2);border:1px solid var(--line);border-radius:11px;
-    padding:13px 14px;font-size:14px;font-family:inherit;color:var(--ink)}
-  .ac-f input:focus{outline:none;border-color:var(--lime)}
-  .ac-btn{display:inline-flex;align-items:center;gap:9px;margin-top:22px;background:var(--lime);
-    color:#0A0D10;border:none;border-radius:14px;padding:17px 42px;font-size:17px;
-    font-weight:800;font-family:var(--fd);cursor:pointer;transition:.15s}
-  .ac-btn:hover:not(:disabled){filter:brightness(1.07);transform:translateY(-2px)}
+  .ac-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px;max-width:560px;
+    margin-top:14px;width:100%;text-align:left}
+  .ac-f label{font-size:11px;font-weight:600;color:var(--muted);display:block;
+    margin-bottom:6px;letter-spacing:.06em;text-transform:uppercase}
+  .ac-f input{width:100%;background:rgba(255,255,255,.03);border:1px solid var(--line2);
+    border-radius:11px;padding:13px 14px;font-size:14px;font-family:inherit;color:var(--ink)}
+  .ac-f input:focus{outline:none;border-color:var(--teal)}
+  .ac-btn{display:inline-flex;align-items:center;gap:10px;margin-top:24px;
+    background:var(--gold);color:#1A1408;border:none;border-radius:13px;padding:16px 40px;
+    font-size:15px;font-weight:700;font-family:var(--fb);cursor:pointer;transition:.2s var(--ease)}
+  .ac-btn:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 12px 30px rgba(200,168,106,.3)}
   .ac-btn:disabled{opacity:.5;cursor:default}
-  .ac-btn svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:2.6;
+  .ac-btn svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2.4;
     stroke-linecap:round;stroke-linejoin:round}
-  .ac-msg{font-size:13px;color:#FCA5A5;margin-top:13px}
+  .ac-msg{font-size:13px;color:#E6A5A5;margin-top:13px}
   @media(max-width:640px){
-    .slide{padding:10vh 6vw}.nav{width:46px;height:46px}.nav.prev{left:8px}.nav.next{right:8px}
-    .ac-grid{grid-template-columns:1fr}.brandtag{left:16px}.money{padding:28px 24px}
+    .slide{padding:13vh 7vw}.nav{width:42px;height:42px}.nav.prev{left:7px}.nav.next{right:7px}
+    .ac-grid{grid-template-columns:1fr}.brandtag{left:16px}.card{padding:24px 20px}
   }
 </style>
 </head>
 <body>
-<!-- biblioteca de ícones -->
 <svg style="display:none"><defs>
-  <symbol id="ic-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4"/></symbol>
+  <symbol id="ic-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.3"/></symbol>
   <symbol id="ic-layers" viewBox="0 0 24 24"><polygon points="12 3 21 8 12 13 3 8 12 3"/><polyline points="3 13 12 18 21 13"/></symbol>
   <symbol id="ic-trend" viewBox="0 0 24 24"><polyline points="3 17 9 11 13 15 21 6"/><polyline points="15 6 21 6 21 12"/></symbol>
   <symbol id="ic-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></symbol>
   <symbol id="ic-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><polygon points="16 8 14 14 8 16 10 10 16 8"/></symbol>
-  <symbol id="ic-rocket" viewBox="0 0 24 24"><path d="M5 15c-1.5 1.5-2 5-2 5s3.5-.5 5-2"/><path d="M9 11a16 16 0 0 1 8-8c2.5 0 4 1.5 4 4a16 16 0 0 1-8 8l-4-4Z"/><circle cx="15" cy="9" r="1.4"/></symbol>
-  <symbol id="ic-refresh" viewBox="0 0 24 24"><polyline points="21 3 21 9 15 9"/><path d="M21 9A9 9 0 1 0 18.5 18"/></symbol>
+  <symbol id="ic-rocket" viewBox="0 0 24 24"><path d="M5 15c-1.5 1.5-2 5-2 5s3.5-.5 5-2"/><path d="M9 11a16 16 0 0 1 8-8c2.5 0 4 1.5 4 4a16 16 0 0 1-8 8l-4-4Z"/><circle cx="15" cy="9" r="1.3"/></symbol>
   <symbol id="ic-users" viewBox="0 0 24 24"><path d="M16 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3.5"/><path d="M21 20v-2a4 4 0 0 0-3-3.8"/></symbol>
   <symbol id="ic-puzzle" viewBox="0 0 24 24"><path d="M9 3h6v3a2 2 0 0 0 4 0V3h2v6h-3a2 2 0 0 0 0 4h3v6h-6v-3a2 2 0 0 0-4 0v3H3v-6h3a2 2 0 0 0 0-4H3V3h6Z"/></symbol>
   <symbol id="ic-spark" viewBox="0 0 24 24"><path d="M12 3v6M12 15v6M3 12h6M15 12h6M6 6l3 3M15 15l3 3M18 6l-3 3M9 15l-3 3"/></symbol>
@@ -177,6 +191,7 @@
   function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
   function ic(id){return '<span class="ico"><svg><use href="#ic-'+id+'"/></svg></span>';}
+  function money(n){return Number(n).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});}
   function api(p){return fetch(FN,{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify(Object.assign({id:ID},p))}).then(function(r){return r.json();});}
 
@@ -186,11 +201,14 @@
     build(p);
   }).catch(function(){root.innerHTML='<div class="pp-err">Não foi possível carregar a proposta.</div>';});
 
-  function card(icon,t,d){
+  // wrappers de animação
+  var ri=0;
+  function R(html){return '<div class="r" style="--i:'+(ri++)+'">'+html+'</div>';}
+  function slide(cls,inner){ri=0;return '<div class="slide '+(cls||'')+'">'+inner+'</div>';}
+  function kick(icon,txt){return '<div class="kicker">'+ic(icon)+'<span>'+txt+'</span><span class="ln"></span></div>';}
+  function card(icon,n,t,d){
     return '<div class="card"><span class="ico chip"><svg><use href="#ic-'+icon+'"/></svg></span>'+
-      '<h3>'+t+'</h3><p>'+d+'</p></div>';}
-  function stepc(n,t,d){
-    return '<div class="card"><div class="n">'+n+'</div><h3>'+t+'</h3><p>'+d+'</p></div>';}
+      (n?'<div class="n">'+n+'</div>':'')+'<h3>'+t+'</h3><p>'+d+'</p></div>';}
   function stat(v,l){return '<div class="stat"><div class="v">'+v+'</div><div class="l">'+l+'</div></div>';}
 
   function build(p){
@@ -199,71 +217,104 @@
       return '<div class="deliv-row"><span class="ico ck"><svg><use href="#ic-check"/></svg></span>'+
         '<span>'+esc(d)+'</span></div>';}).join('');
 
+    // slide financeiro
+    var hasMoney=p.setup_fee!=null||p.monthly_fee!=null;
+    var moneyCards='';
+    if(p.setup_fee!=null) moneyCards+='<div class="money-card"><div class="ml">Investimento inicial</div><div class="mv">'+money(p.setup_fee)+'</div></div>';
+    if(p.monthly_fee!=null) moneyCards+='<div class="money-card"><div class="ml">Mensalidade</div><div class="mv">'+money(p.monthly_fee)+(p.contract_months?'<span style="font-size:14px;color:var(--muted)"> / mês</span>':'')+'</div></div>';
+    if(p.monthly_fee!=null&&p.contract_months){
+      var total=Number(p.setup_fee||0)+Number(p.monthly_fee)*Number(p.contract_months);
+      moneyCards+='<div class="money-card total"><div class="ml">Total do contrato · '+p.contract_months+' meses</div><div class="mv">'+money(total)+'</div></div>';
+    }
+
     slides=[
-      '<div class="slide cover active"><div class="brand"><span class="dot"></span>MYLION</div>'+
-        '<h1>Proposta<br>Comercial</h1>'+
-        '<div class="lead">Um plano sob medida para '+esc(p.client_name||'a sua empresa')+
-        ' crescer com previsibilidade.</div>'+
-        '<div class="who">Apresentado por '+esc(p.vendedor)+' · '+
-        new Date(p.created_at).toLocaleDateString('pt-BR')+'</div></div>',
+      slide('cover',
+        R('<div class="brand"><span class="d"></span>MYLION</div>')+
+        R('<h1>Proposta<br>Comercial</h1>')+
+        R('<div class="lead">Um plano sob medida para '+esc(p.client_name||'a sua empresa')+
+          ' transformar a captação de clientes em um processo previsível, mensurável e escalável.</div>')+
+        R('<div class="rule"></div>')+
+        R('<div class="who">Apresentado por '+esc(p.vendedor)+'  ·  '+
+          new Date(p.created_at).toLocaleDateString('pt-BR')+'</div>')),
 
-      '<div class="slide"><div class="kicker">'+ic('search')+'O seu momento</div>'+
-        '<h2>Onde você está hoje</h2>'+
-        '<div class="big">'+esc(p.client_context||'Você quer crescer — mas falta um processo previsível de aquisição de clientes.').replace(/\n/g,'<br>')+'</div></div>',
+      slide('',
+        R(kick('search','O seu momento'))+
+        R('<h2>Onde você está hoje</h2>')+
+        R('<div class="big">'+esc(p.client_context||'Você quer crescer — mas falta um processo previsível de aquisição de clientes.').replace(/\n/g,'<br>')+'</div>')+
+        R('<div class="sub">Todo negócio que cresce de verdade passou por esse ponto: o momento de parar de depender da sorte e construir um sistema. É exatamente aí que esta proposta começa.</div>')),
 
-      '<div class="slide"><div class="kicker">'+ic('spark')+'A solução</div>'+
-        '<h2>O que podemos fazer por você</h2><div class="grid">'+
-        card('target','Atrair','Levar até você as pessoas certas, de forma constante — não por sorte.')+
-        card('layers','Estruturar','Montar um funil de vendas que transforma interesse em cliente.')+
-        card('trend','Escalar','Crescer com método e dados, sem depender só de indicação.')+
-        '</div></div>',
+      slide('',
+        R(kick('spark','A solução'))+
+        R('<h2>O que podemos fazer <span class="em">por você</span></h2>')+
+        R('<div class="lead">Trabalhamos três frentes que, juntas, formam uma máquina de aquisição completa — da atração do lead certo até o fechamento.</div>')+
+        R('<div class="grid">'+
+          card('target','','Atrair','Levar até você as pessoas certas, de forma constante e mensurável — com tráfego pago e conteúdo estratégico, não por sorte.')+
+          card('layers','','Estruturar','Montar um funil de vendas que recebe, qualifica e conduz cada lead até a conversa de fechamento.')+
+          card('trend','','Escalar','Crescer com base em dados: o que funciona recebe mais investimento, o que não funciona é ajustado rápido.')+
+        '</div>')),
 
-      '<div class="slide"><div class="kicker">'+ic('trend')+'O mercado</div>'+
-        '<h2>O momento de '+esc(nicho)+'</h2>'+
-        '<div class="stats">'+
-        stat('4º','maior mercado do mundo no setor')+
-        stat('59%','dos gestores querem crescer o faturamento')+
-        stat('24%','têm uma estratégia comercial estruturada')+
-        '</div>'+
-        '<div class="lead" style="margin-top:22px">Existe uma janela clara para quem se '+
-        '<span class="accent">estrutura primeiro</span>.</div></div>',
+      slide('',
+        R(kick('trend','O mercado'))+
+        R('<h2>O momento de <span class="em">'+esc(nicho)+'</span></h2>')+
+        R('<div class="lead">O mercado está aquecido — e competitivo. Quem cresce não é quem trabalha mais, é quem tem previsibilidade.</div>')+
+        R('<div class="stats">'+
+          stat('4º','maior mercado do mundo no setor de estética e saúde')+
+          stat('59%','dos gestores colocam o crescimento do faturamento como prioridade')+
+          stat('24%','de fato têm uma estratégia comercial estruturada')+
+        '</div>')+
+        R('<div class="sub">A diferença entre os 59% que querem crescer e os 24% que crescem tem nome: método. Existe uma janela clara para quem se estrutura primeiro — e ela não fica aberta para sempre.</div>')),
 
-      '<div class="slide"><div class="kicker">'+ic('compass')+'Como funciona</div>'+
-        '<h2>Nossa metodologia</h2><div class="grid">'+
-        stepc('01','Diagnóstico','Entendemos o seu negócio, suas metas e seus números.')+
-        stepc('02','Estratégia','Desenhamos o funil, a oferta e os canais de aquisição.')+
-        stepc('03','Execução','Colocamos no ar: tráfego, conteúdo, automações e CRM.')+
-        stepc('04','Otimização','Acompanhamos os números e melhoramos mês a mês.')+
-        '</div></div>',
+      slide('',
+        R(kick('compass','Como funciona'))+
+        R('<h2>Nossa metodologia</h2>')+
+        R('<div class="lead">Um processo testado, em quatro etapas, do diagnóstico à otimização contínua.</div>')+
+        R('<div class="grid">'+
+          card('search','Etapa 01','Diagnóstico','Mergulhamos no seu negócio: metas, números, ticket médio e o caminho que o cliente faz hoje até comprar.')+
+          card('compass','Etapa 02','Estratégia','Desenhamos o funil, a oferta e os canais de aquisição certos para o seu momento e o seu mercado.')+
+          card('rocket','Etapa 03','Execução','Colocamos tudo no ar: campanhas, criativos, conteúdo, automações e CRM — operando de verdade.')+
+          card('spark','Etapa 04','Otimização','Acompanhamos os números de perto e melhoramos mês a mês. O que dá resultado, a gente escala.')+
+        '</div>')),
 
-      '<div class="slide"><div class="kicker">'+ic('layers')+'Escopo</div>'+
-        '<h2>O que vamos entregar</h2>'+
-        (deliv?'<div class="deliv">'+deliv+'</div>':'<div class="big">A combinar.</div>')+'</div>',
+      slide('',
+        R(kick('layers','Escopo do projeto'))+
+        R('<h2>O que vamos <span class="em">entregar</span></h2>')+
+        R('<div class="lead">Tudo o que está incluído nesta proposta — cada item pensado para sustentar o seu crescimento.</div>')+
+        R(deliv?'<div class="deliv">'+deliv+'</div>':'<div class="big">A combinar.</div>')),
 
-      '<div class="slide"><div class="kicker">'+ic('spark')+'Por que a MyLion</div>'+
-        '<h2>O que nos torna diferentes</h2><div class="grid">'+
-        card('target','Foco em ROI','Cada R$ investido é medido. O objetivo é retorno, não vaidade.')+
-        card('users','Time próximo','Acompanhamento de verdade — você não fica sozinho.')+
-        card('puzzle','Tudo integrado','Tráfego, conteúdo, CRM e automações na mesma estratégia.')+
-        '</div></div>',
+      slide('',
+        R(kick('spark','Por que a MyLion'))+
+        R('<h2>O que nos torna diferentes</h2>')+
+        R('<div class="lead">Você não está contratando "mais uma agência". Está montando um time de crescimento.</div>')+
+        R('<div class="grid">'+
+          card('target','','Foco em ROI','Cada real investido é medido. O nosso objetivo é retorno — não curtida, não vaidade.')+
+          card('users','','Time por perto','Acompanhamento de verdade, com reuniões e relatórios claros. Você nunca fica sozinho no processo.')+
+          card('puzzle','','Tudo integrado','Tráfego, conteúdo, CRM e automações trabalham juntos, dentro de uma única estratégia coerente.')+
+        '</div>')),
 
-      '<div class="slide"><div class="kicker">'+ic('rocket')+'O que esperar</div>'+
-        '<h2>Resultados que buscamos</h2>'+
-        '<div class="stats">'+
-        stat('+ Agenda','mais cheia e previsível todo mês')+
-        stat('ROI','custo de aquisição sob controle')+
-        stat('Processo','que funciona com ou sem você na operação')+
-        '</div></div>',
+      slide('',
+        R(kick('rocket','O que esperar'))+
+        R('<h2>Os resultados que <span class="em">buscamos</span></h2>')+
+        R('<div class="lead">Não prometemos milagre. Prometemos método, transparência e melhoria contínua — e é isso que gera resultado consistente.</div>')+
+        R('<div class="stats">'+
+          stat('Agenda','mais cheia e previsível, mês após mês')+
+          stat('ROI','custo de aquisição sob controle e medido')+
+          stat('Processo','que funciona com ou sem você na operação diária')+
+        '</div>')),
 
-      '<div class="slide"><div class="kicker">'+ic('cash')+'Investimento</div>'+
-        '<h2>Proposta financeira</h2>'+
-        '<div class="money"><span class="ico"><svg><use href="#ic-cash"/></svg></span>'+
-        '<div class="v">'+esc(p.payment||'A combinar')+'</div></div></div>',
+      slide('',
+        R(kick('cash','Investimento'))+
+        R('<h2>Proposta financeira</h2>')+
+        R(hasMoney
+          ? '<div class="money-grid">'+moneyCards+'</div>'
+          : '<div class="big">'+esc(p.payment||'A combinar')+'</div>')+
+        R(hasMoney&&p.payment?'<div class="conditions">'+esc(p.payment)+'</div>':'')+
+        R('<div class="sub">Mais do que um custo, isto é um investimento com retorno mensurável. O foco de cada real aplicado é trazer clientes — e crescer o seu faturamento.</div>')),
 
-      '<div class="slide cover"><div class="kicker">'+ic('flag')+'Vamos juntos?</div>'+
-        '<h1>Sua máquina de<br>vendas começa <span class="accent">agora</span></h1>'+
-        '<div class="lead">Você pode continuar dependendo da sorte — ou construir um processo '+
-        'previsível. A MyLion já fez isso por outros negócios. Vamos fazer pelo seu.</div></div>',
+      slide('cover',
+        R(kick('flag','Vamos juntos?'))+
+        R('<h1>Sua máquina de vendas<br>começa <span class="em">agora</span></h1>')+
+        R('<div class="lead">Você pode continuar dependendo de indicação e da sorte — ou construir, a partir de hoje, um processo de aquisição que cresce com o seu negócio.</div>')+
+        R('<div class="lead">A MyLion já fez isso por outros negócios. O próximo passo é simples: aceitar esta proposta e começar.</div>')),
 
       acceptSlide(p)
     ];
@@ -272,26 +323,27 @@
 
   function acceptSlide(p){
     if(p.status==='accepted')
-      return '<div class="slide cover"><span class="ico" style="width:64px;height:64px;color:var(--lime)">'+
-        '<svg><use href="#ic-check"/></svg></span>'+
-        '<h2>Proposta aceita</h2><div class="lead">Esta proposta já foi aceita. '+
-        'Em breve entramos em contato com o contrato.</div></div>';
-    return '<div class="slide"><div class="kicker">'+ic('check')+'Aceite</div>'+
-      '<h2>Vamos começar?</h2>'+
-      '<div class="lead" style="margin-bottom:6px">Preencha seus dados para aceitar a proposta.</div>'+
-      '<div class="ac-grid">'+
+      return slide('cover',
+        R('<span class="ico" style="width:58px;height:58px;color:var(--teal)"><svg><use href="#ic-check"/></svg></span>')+
+        R('<h2>Proposta aceita</h2>')+
+        R('<div class="lead">Esta proposta já foi aceita. Em breve entramos em contato com o contrato.</div>'));
+    return slide('',
+      R(kick('check','Aceite'))+
+      R('<h2>Vamos <span class="em">começar</span>?</h2>')+
+      R('<div class="lead">Preencha seus dados para aceitar a proposta. Usaremos essas informações para a confecção do contrato.</div>')+
+      R('<div class="ac-grid">'+
         acf('ac-nome','Nome completo *')+acf('ac-doc','CPF / CNPJ')+
         acf('ac-email','E-mail *')+acf('ac-tel','Telefone')+
         acf('ac-empresa','Empresa')+acf('ac-end','Endereço')+
-      '</div>'+
-      '<button class="ac-btn" id="ac-btn">'+ic('check')+'Aceitar proposta</button>'+
-      '<div class="ac-msg" id="ac-msg"></div></div>';
+      '</div>')+
+      R('<button class="ac-btn" id="ac-btn">'+ic('check')+'Aceitar proposta</button>'+
+        '<div class="ac-msg" id="ac-msg"></div>'));
   }
   function acf(id,lb){return '<div class="ac-f"><label>'+lb+'</label><input id="'+id+'"></div>';}
 
   function render(p){
     var dots='';for(var i=0;i<slides.length;i++)dots+='<span class="dot" data-i="'+i+'"></span>';
-    root.innerHTML='<div class="brandtag"><span class="dot"></span>MYLION</div>'+
+    root.innerHTML='<div class="brandtag"><span class="d"></span>MYLION</div>'+
       '<div class="deck">'+slides.join('')+'</div>'+
       '<button class="nav prev" id="nav-prev"><svg><use href="#ic-arrow-l"/></svg></button>'+
       '<button class="nav next" id="nav-next"><svg><use href="#ic-arrow-r"/></svg></button>'+
@@ -312,7 +364,7 @@
     document.querySelectorAll('.dot').forEach(function(d,k){d.classList.toggle('on',k===i);});
     document.getElementById('nav-prev').disabled=i===0;
     document.getElementById('nav-next').disabled=i===slides.length-1;
-    document.getElementById('count').textContent=(i+1)+' / '+slides.length;
+    document.getElementById('count').textContent=(i+1<10?'0':'')+(i+1)+' / '+slides.length;
   }
   function accept(p){
     var d={nome:v('ac-nome'),doc:v('ac-doc'),email:v('ac-email'),
@@ -324,17 +376,17 @@
     api({action:'accept',data:d}).then(function(r){
       if(r.ok){
         root.innerHTML='<div class="deck"><div class="slide cover active">'+
-          '<span class="ico" style="width:70px;height:70px;color:var(--lime)">'+
-          '<svg><use href="#ic-check"/></svg></span>'+
-          '<h1>Proposta aceita!</h1>'+
-          '<div class="lead">Obrigado, '+esc(d.nome.split(' ')[0])+'! Recebemos o seu aceite. '+
-          'Vamos preparar o contrato e entrar em contato em breve.</div></div></div>';
+          '<div class="r" style="--i:0"><span class="ico" style="width:64px;height:64px;color:var(--teal)">'+
+          '<svg><use href="#ic-check"/></svg></span></div>'+
+          '<div class="r" style="--i:1"><h1>Proposta aceita</h1></div>'+
+          '<div class="r" style="--i:2"><div class="lead">Obrigado, '+esc(d.nome.split(' ')[0])+
+          '! Recebemos o seu aceite. Vamos preparar o contrato e entrar em contato em breve.</div></div></div></div>';
       }else{
-        btn.disabled=false;btn.innerHTML='Aceitar proposta';
+        btn.disabled=false;btn.textContent='Aceitar proposta';
         msg.textContent=r.error||'Não foi possível registrar o aceite.';
       }
     }).catch(function(){
-      btn.disabled=false;btn.innerHTML='Aceitar proposta';
+      btn.disabled=false;btn.textContent='Aceitar proposta';
       msg.textContent='Erro de conexão. Tente de novo.';
     });
   }

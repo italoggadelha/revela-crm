@@ -2646,6 +2646,9 @@
     $('proposta-niche').value = p ? (p.client_niche || '') : '';
     $('proposta-context').value = p ? (p.client_context || '') : '';
     $('proposta-payment').value = p ? (p.payment || '') : '';
+    $('proposta-setup').value = p && p.setup_fee != null ? p.setup_fee : '';
+    $('proposta-monthly').value = p && p.monthly_fee != null ? p.monthly_fee : '';
+    $('proposta-months').value = p && p.contract_months != null ? p.contract_months : '';
     $('proposta-transcription').value = p ? (p.transcription || '') : '';
     const chosen = p ? (p.deliverables || []) : PROPOSAL_DELIVERABLES.slice(0, 3);
     $('proposta-delivs').innerHTML = PROPOSAL_DELIVERABLES.map(d =>
@@ -2659,19 +2662,21 @@
   async function saveProposal() {
     const client = $('proposta-client').value.trim();
     const context = $('proposta-context').value.trim();
-    const payment = $('proposta-payment').value.trim();
     if (!client) { toast('Informe o nome do cliente', 'error'); return; }
     if (!context) { toast('Descreva o contexto do cliente', 'error'); return; }
-    if (!payment) { toast('Informe a forma de pagamento', 'error'); return; }
     const delivs = $$('#proposta-delivs input:checked').map(c => c.value);
     const extra = $('proposta-extra').value.split('\n').map(s => s.trim()).filter(Boolean);
+    const numOrNull = v => (v !== '' && v != null && !isNaN(v)) ? Number(v) : null;
     const patch = {
       lead_id: $('proposta-lead').value || null,
       client_name: client,
       client_niche: $('proposta-niche').value.trim() || null,
       client_context: context,
       deliverables: delivs.concat(extra),
-      payment,
+      payment: $('proposta-payment').value.trim() || null,
+      setup_fee: numOrNull($('proposta-setup').value),
+      monthly_fee: numOrNull($('proposta-monthly').value),
+      contract_months: numOrNull($('proposta-months').value),
       transcription: $('proposta-transcription').value.trim() || null
     };
     const editing = state.editingProposal;
