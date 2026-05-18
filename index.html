@@ -102,6 +102,12 @@
     <symbol id="i-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
       <line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/>
     </symbol>
+    <symbol id="i-trophy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
+      <path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/>
+      <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
+      <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
+    </symbol>
   </defs>
 </svg>
 </head>
@@ -511,11 +517,14 @@
           </div>
         </div>
 
-        <div class="chart-card">
+        <div class="chart-card leaderboard-card">
           <div class="chart-card-head">
-            <div>
-              <div class="chart-title">🏆 Top vendedores</div>
-              <div class="chart-sub">Performance da equipe — leads, vendas e taxa de conversão</div>
+            <div class="lb-head">
+              <span class="lb-trophy"><svg><use href="#i-trophy"/></svg></span>
+              <div>
+                <div class="chart-title">Top vendedores</div>
+                <div class="chart-sub">Performance da equipe — leads, vendas e conversão</div>
+              </div>
             </div>
           </div>
           <div class="leaderboard" id="leaderboard"></div>

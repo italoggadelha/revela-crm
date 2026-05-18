@@ -3561,3 +3561,80 @@ a { color: inherit; text-decoration: none; }
   box-shadow: 0 7px 16px color-mix(in srgb, var(--metric-color, var(--accent)) 42%, transparent);
 }
 .metric-icon svg { width: 23px; height: 23px; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   ONDA B — topbar flutuante, leaderboard, traqueamento
+   ═══════════════════════════════════════════════════════════════════ */
+/* Topbar como bloco flutuante arredondado */
+.topbar {
+  margin: 12px 14px 2px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+/* Top vendedores — destaque + animação */
+.lb-head { display: flex; align-items: center; gap: 12px; }
+.lb-trophy {
+  width: 46px; height: 46px; border-radius: 13px; flex-shrink: 0;
+  background: linear-gradient(135deg, #FBBF24 0%, #F59E0B 100%);
+  color: #fff; display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 7px 16px rgba(245, 158, 11, 0.42);
+  animation: trophy-bob 2.6s ease-in-out infinite;
+}
+.lb-trophy svg { width: 23px; height: 23px; }
+@keyframes trophy-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+.leaderboard-card .chart-title { font-size: 17px; }
+.leader-row.leader-top { animation: leader-glow 2.8s ease-in-out infinite; }
+@keyframes leader-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+  50% { box-shadow: 0 0 0 5px rgba(245, 158, 11, 0.16); }
+}
+
+/* Traqueamento — cards com ícone flutuante e linhas */
+#tracking-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 22px;
+  padding-top: 18px;
+}
+.source-card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 18px;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: transform 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+.source-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
+.source-card-icon {
+  position: absolute; top: -15px; right: 16px;
+  width: 48px; height: 48px; border-radius: 14px;
+  background: var(--src-bg, var(--surface-2));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 23px;
+  box-shadow: var(--shadow-md);
+}
+.source-card-head { margin-bottom: 13px; padding-right: 46px; }
+.source-card-name { font-size: 16px; font-weight: 700; color: var(--text); }
+.source-card-sub { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+.source-rows { display: flex; flex-direction: column; gap: 7px; }
+.source-row {
+  display: flex; align-items: center; gap: 9px;
+  background: var(--surface-2);
+  border-radius: 12px;
+  padding: 8px 11px;
+  transition: background 0.12s var(--ease);
+}
+.source-row:hover { background: var(--surface-3); }
+.sr-ic { font-size: 14px; flex-shrink: 0; width: 18px; text-align: center; }
+.sr-lb { font-size: 12.5px; font-weight: 600; color: var(--text-soft); flex-shrink: 0; width: 80px; }
+.sr-bar { flex: 1; height: 6px; background: var(--surface-3); border-radius: 3px; overflow: hidden; }
+.sr-bar > span { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.sr-val {
+  flex-shrink: 0; font-size: 12.5px; font-weight: 700; color: var(--text);
+  font-variant-numeric: tabular-nums; min-width: 56px; text-align: right;
+}
+.sr-val i { font-style: normal; font-weight: 600; color: var(--text-faded); font-size: 11px; margin-left: 3px; }

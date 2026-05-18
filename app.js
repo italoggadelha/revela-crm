@@ -1182,44 +1182,27 @@
 
       const pct = (n) => total > 0 ? Math.round((n / total) * 100) : 0;
 
+      const row = (ic, lb, val, p) => `
+        <div class="source-row">
+          <span class="sr-ic">${ic}</span>
+          <span class="sr-lb">${lb}</span>
+          <span class="sr-bar"><span style="width:${p}%"></span></span>
+          <span class="sr-val">${val}<i>${p}%</i></span>
+        </div>`;
       return `
         <div class="source-card" data-source="${key}" style="--src-bg:${meta.bg}">
-          <div class="source-head">
-            <div class="source-icon" style="background:${meta.bg}">${meta.icon}</div>
-            <div style="min-width:0;flex:1">
-              <div class="source-name">${escapeHtml(meta.label)}</div>
-              <div class="source-sub">clique pra ver leads</div>
-            </div>
-            <div style="text-align:right">
-              <div class="source-total">${total}</div>
-              <div class="source-total-label">Leads</div>
-            </div>
+          <div class="source-card-icon">${meta.icon}</div>
+          <div class="source-card-head">
+            <div class="source-card-name">${escapeHtml(meta.label)}</div>
+            <div class="source-card-sub">${total} ${total === 1 ? 'lead' : 'leads'} · clique para ver</div>
           </div>
-          <div class="source-metrics">
-            <div class="source-metric">
-              <div class="source-metric-label">Vieram</div>
-              <div class="source-metric-value">${counts.leads}<span class="source-metric-pct">100%</span></div>
-            </div>
-            <div class="source-metric">
-              <div class="source-metric-label">Agendaram</div>
-              <div class="source-metric-value">${counts.agendou}<span class="source-metric-pct">${pct(counts.agendou)}%</span></div>
-            </div>
-            <div class="source-metric">
-              <div class="source-metric-label">Realizaram</div>
-              <div class="source-metric-value">${counts.realizou}<span class="source-metric-pct">${pct(counts.realizou)}%</span></div>
-            </div>
-            <div class="source-metric">
-              <div class="source-metric-label">Compraram</div>
-              <div class="source-metric-value">${counts.comprou}<span class="source-metric-pct">${pct(counts.comprou)}%</span></div>
-            </div>
-            <div class="source-metric">
-              <div class="source-metric-label">No show</div>
-              <div class="source-metric-value">${counts.noshow}<span class="source-metric-pct">${pct(counts.noshow)}%</span></div>
-            </div>
-            <div class="source-metric">
-              <div class="source-metric-label">Perderam</div>
-              <div class="source-metric-value">${counts.perdeu}<span class="source-metric-pct">${pct(counts.perdeu)}%</span></div>
-            </div>
+          <div class="source-rows">
+            ${row('👀', 'Vieram', counts.leads, 100)}
+            ${row('📅', 'Agendaram', counts.agendou, pct(counts.agendou))}
+            ${row('✅', 'Realizaram', counts.realizou, pct(counts.realizou))}
+            ${row('💰', 'Compraram', counts.comprou, pct(counts.comprou))}
+            ${row('🚫', 'No show', counts.noshow, pct(counts.noshow))}
+            ${row('⚠️', 'Perderam', counts.perdeu, pct(counts.perdeu))}
           </div>
         </div>
       `;
