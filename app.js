@@ -735,26 +735,33 @@
     setupSortables();
   }
 
+  // Fileira de 5 bolinhas representando a temperatura/interesse do lead
+  function cardDots(temp) {
+    const colors = ['#FB7185', '#FB923C', '#FACC15', '#A3E635', '#34D399'];
+    let h = '';
+    for (let i = 0; i < 5; i++) {
+      h += `<span class="card-dot"${i < temp ? ` style="background:${colors[i]}"` : ''}></span>`;
+    }
+    return `<div class="card-dots">${h}</div>`;
+  }
+
   function cardHTML(lead, stage) {
     const handle = lead.instagram || '';
     const fname = firstName(lead.nome);
     const avatar = avatarUrl(handle, lead.nome);
     const temp = leadTemperature(lead);
-    const summary = lead.instagram_summary
-      ? `<div class="card-summary">${escapeHtml(lead.instagram_summary)}</div>`
-      : `<div class="card-summary loading" data-needs-summary="${lead.id}">Gerando resumo</div>`;
     const assignedP = lead.assigned_to ? profileById(lead.assigned_to) : null;
     const assignedChip = assignedP
-      ? `<span class="chip chip-accent" title="Vendedor: ${escapeHtml(assignedP.nome || assignedP.email)}">👤 ${escapeHtml((assignedP.nome || assignedP.email).split(/[@\s]/)[0])}</span>`
+      ? `<span class="chip chip-accent" title="Vendedor: ${escapeHtml(profileName(assignedP))}">👤 ${escapeHtml(firstName(assignedP.nome) || profileName(assignedP))}</span>`
       : '';
     const sm = lead.source_type ? sourceMeta(lead.source_type) : null;
     const sourceChip = sm
-      ? `<span class="chip chip-source" data-src="${lead.source_type}" title="${escapeHtml(sm.label)}${lead.source_campaign ? ' · ' + escapeHtml(lead.source_campaign) : ''}">${sm.icon} ${escapeHtml(sm.label)}</span>`
-      : '';
+      ? `<span class="chip chip-source" data-src="${lead.source_type}" title="${escapeHtml(sm.label)}">${sm.icon} ${escapeHtml(sm.label)}</span>`
+      : '<span class="card-bottom-empty">Sem origem</span>';
 
     return `
       <div class="card" data-lead-id="${lead.id}">
-        <div class="card-head">
+        <div class="card-top">
           <div class="card-avatar">
             ${avatar
               ? `<img src="${avatar}" alt="" onerror="this.parentElement.textContent='${initials(lead.nome)}';">`
@@ -762,26 +769,31 @@
           </div>
           <div class="card-identity">
             <div class="card-name">${escapeHtml(lead.nome)}</div>
-            <div class="card-handle">${escapeHtml(handle)}</div>
+            <div class="card-role">${escapeHtml(handle || lead.momento || '—')}</div>
           </div>
-          ${tempGauge(temp)}
+          <span class="card-open" title="Abrir lead"><svg><use href="#i-expand"/></svg></span>
         </div>
-        <div class="card-meta">
+        <div class="card-tags">
           ${lead.momento ? `<span class="chip">${escapeHtml(lead.momento)}</span>` : ''}
           ${lead.nota_geral != null ? `<span class="chip chip-score">${Number(lead.nota_geral).toFixed(1).replace('.', ',')}/5</span>` : ''}
-          ${sourceChip}
           ${assignedChip}
         </div>
-        ${summary}
+        <div class="card-bottom">
+          <div class="card-bottom-col">
+            <div class="card-bottom-lb">Origem</div>
+            ${sourceChip}
+          </div>
+          <div class="card-bottom-col card-bottom-right">
+            <div class="card-bottom-lb">${tempLabel(temp)}</div>
+            ${cardDots(temp)}
+          </div>
+        </div>
         <div class="card-footer">
           <a class="card-btn wa" href="${whatsappLink(lead.telefone, fname)}" target="_blank" onclick="event.stopPropagation()" title="WhatsApp">
             <svg><use href="#i-wa"/></svg>
           </a>
           <a class="card-btn ig" href="${instagramLink(handle)}" target="_blank" onclick="event.stopPropagation()" title="Instagram">
             <svg><use href="#i-ig"/></svg>
-          </a>
-          <a class="card-btn report" href="${reportLink(lead)}" target="_blank" onclick="event.stopPropagation()" title="Relatório">
-            <svg><use href="#i-report"/></svg>
           </a>
           <span class="card-time">${relativeTime(lead.created_at)}</span>
         </div>
@@ -1058,12 +1070,12 @@
           label: 'Leads',
           data,
           fill: true,
-          backgroundColor: 'rgba(197, 240, 60, 0.10)',
-          borderColor: '#C5F03C',
+          backgroundColor: 'rgba(15, 118, 110, 0.08)',
+          borderColor: '#0F766E',
           borderWidth: 2,
           pointRadius: 0,
           pointHoverRadius: 5,
-          pointBackgroundColor: '#C5F03C',
+          pointBackgroundColor: '#0F766E',
           tension: 0.3
         }]
       },
@@ -1071,8 +1083,8 @@
         responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: false }, tooltip: { displayColors: false } },
         scales: {
-          x: { grid: { display: false }, ticks: { maxTicksLimit: 8, color: '#9A9A99', font: { size: 10 } } },
-          y: { beginAtZero: true, grid: { color: '#2C2C30' }, ticks: { stepSize: 1, color: '#9A9A99', font: { size: 10 } } }
+          x: { grid: { display: false }, ticks: { maxTicksLimit: 8, color: '#9CA3AF', font: { size: 10 } } },
+          y: { beginAtZero: true, grid: { color: '#E8E6E1' }, ticks: { stepSize: 1, color: '#9CA3AF', font: { size: 10 } } }
         }
       }
     });
@@ -1097,7 +1109,7 @@
         labels: buckets.map(b => b.replace('R$ ', '').replace(' mil/mês', 'k').replace('Até ', '<')),
         datasets: [{
           data,
-          backgroundColor: '#C5F03C',
+          backgroundColor: '#0F766E',
           borderRadius: 6,
           borderSkipped: false,
           maxBarThickness: 60
@@ -1107,8 +1119,8 @@
         responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: false }, tooltip: { displayColors: false } },
         scales: {
-          x: { grid: { display: false }, ticks: { color: '#9A9A99', font: { size: 11 } } },
-          y: { beginAtZero: true, grid: { color: '#2C2C30' }, ticks: { stepSize: 1, color: '#9A9A99', font: { size: 10 } } }
+          x: { grid: { display: false }, ticks: { color: '#6B6B68', font: { size: 11 } } },
+          y: { beginAtZero: true, grid: { color: '#E8E6E1' }, ticks: { stepSize: 1, color: '#9CA3AF', font: { size: 10 } } }
         }
       }
     });
