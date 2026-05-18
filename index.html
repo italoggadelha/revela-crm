@@ -279,6 +279,12 @@
             <span class="search-icon"><svg><use href="#i-search"/></svg></span>
             <input type="text" class="search-input" id="chat-search" placeholder="Buscar conversa...">
           </div>
+          <div class="chat-filters">
+            <button class="chat-filter-btn" id="chat-filter-unread">Não lidas</button>
+            <select class="chat-filter-sel" id="chat-filter-vendor">
+              <option value="">Todos vendedores</option>
+            </select>
+          </div>
           <div class="chat-list" id="chat-list"></div>
         </aside>
         <main class="chat-main" id="chat-main">
@@ -319,6 +325,43 @@
             </footer>
           </div>
         </main>
+
+        <!-- Painel lateral do negócio (aparece com a conversa aberta) -->
+        <aside class="chat-info" id="chat-info" style="display:none">
+          <div class="chat-info-hd">
+            <div class="chat-info-avatar" id="ci-avatar">?</div>
+            <div class="chat-info-name" id="ci-name">—</div>
+            <div class="chat-info-sub" id="ci-sub">—</div>
+          </div>
+          <div class="chat-info-body">
+            <div class="ci-field">
+              <label class="ci-label">Status no pipeline</label>
+              <select class="input-text" id="ci-status"></select>
+            </div>
+            <div class="ci-field">
+              <label class="ci-label">Vendedor responsável</label>
+              <select class="input-text" id="ci-vendor"></select>
+            </div>
+            <div class="ci-field">
+              <label class="ci-label">Valor do negócio (R$)</label>
+              <input type="number" class="input-text" id="ci-valor" placeholder="0,00" step="0.01">
+            </div>
+            <div class="ci-field">
+              <label class="ci-label">Notas do vendedor</label>
+              <textarea class="notes-textarea" id="ci-notes" placeholder="Anotações sobre o negócio..."></textarea>
+            </div>
+            <div class="ci-actions">
+              <button class="ci-act" id="ci-schedule"><svg><use href="#i-calendar"/></svg>Agendar reunião</button>
+              <button class="ci-act" id="ci-automate"><svg><use href="#i-bolt"/></svg>Automatizar mensagem</button>
+              <button class="ci-act" id="ci-task"><svg><use href="#i-task"/></svg>Criar tarefa</button>
+              <button class="ci-act" id="ci-fulllead"><svg><use href="#i-report"/></svg>Ver lead completo</button>
+            </div>
+            <div class="ci-field">
+              <label class="ci-label">Histórico do lead</label>
+              <div class="ci-history" id="ci-history"></div>
+            </div>
+          </div>
+        </aside>
       </div>
     </section>
 

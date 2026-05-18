@@ -59,7 +59,11 @@
     conversations: [],
     messages: {},                 // { conversationId: [msgs] }
     activeConversationId: null,
-    chatSearchTerm: ''
+    chatSearchTerm: '',
+    chatFilter: { unread: false, vendor: '' },
+    leadHistory: {},
+    chatInfoLead: null,
+    chatInfoLeadId: null
   };
 
   // ─── Mapa de fontes (label + ícone + cor) ───
@@ -1439,11 +1443,11 @@
     list.innerHTML = tasks.map(taskRowHTML).join('');
   }
 
-  function openTaskModal(id) {
+  function openTaskModal(id, presetTitle) {
     const t = id ? state.tasks.find(x => x.id === id) : null;
     state.editingTask = t || null;
     $('task-modal-title').textContent = t ? 'Editar tarefa' : 'Nova tarefa';
-    $('task-title').value = t ? (t.title || '') : '';
+    $('task-title').value = t ? (t.title || '') : (presetTitle || '');
     $('task-due').value = t ? (t.due_date || '') : '';
     $('task-time').value = t && t.due_time ? String(t.due_time).slice(0, 5) : '';
     $('task-priority').value = t ? (t.priority || 'normal') : 'normal';
@@ -1948,13 +1952,13 @@
     renderSchedMsgList();
   }
 
-  function openSchedMsgModal() {
+  function openSchedMsgModal(presetLeadId) {
     const sel = $('schedmsg-lead');
     sel.innerHTML = '<option value="">— Selecione um lead —</option>' +
       state.leads.map(l =>
         `<option value="${l.id}">${escapeHtml((l.nome || 'Lead') + (l.telefone ? ' · ' + l.telefone : ''))}</option>`
       ).join('');
-    sel.value = '';
+    sel.value = presetLeadId || '';
     $('schedmsg-date').value = ymd(new Date());
     $('schedmsg-time').value = '09:00';
     $('schedmsg-body').value = '';
@@ -2418,19 +2422,103 @@
   // ─── Render principal do chat ───
   function renderChat() {
     renderChatList();
+    const layout = document.querySelector('.chat-layout');
+    if (layout) layout.classList.toggle('info-open', !!state.activeConversationId);
     if (state.activeConversationId) {
       renderChatThread();
+      renderChatInfo();
     } else {
       $('chat-thread-wrap').style.display = 'none';
       $('chat-empty').style.display = '';
+      $('chat-info').style.display = 'none';
     }
+  }
+
+  // ─── Painel lateral do negócio (chat) ───
+  function renderChatInfo() {
+    const panel = $('chat-info');
+    if (!panel) return;
+    const conv = state.conversations.find(c => c.id === state.activeConversationId);
+    if (!conv) { panel.style.display = 'none'; return; }
+    panel.style.display = '';
+    const basic = conv.leads || {};
+    const leadId = conv.lead_id || basic.id;
+    const lead = state.leads.find(l => l.id === leadId) || basic;
+    state.chatInfoLead = lead;
+    state.chatInfoLeadId = leadId;
+
+    $('ci-avatar').innerHTML = `<img src="${avatarUrl(null, lead.nome)}" alt="">`;
+    $('ci-name').textContent = lead.nome || basic.telefone || '—';
+    $('ci-sub').textContent = [lead.instagram, lead.telefone || basic.telefone].filter(Boolean).join(' · ') || '—';
+
+    $('ci-status').innerHTML = state.pipeline.map(s =>
+      `<option value="${s.id}" ${s.id === lead.pipeline_status ? 'selected' : ''}>${escapeHtml(s.label)}</option>`).join('');
+    $('ci-vendor').innerHTML = '<option value="">Não atribuído</option>' +
+      state.profiles.map(p =>
+        `<option value="${p.id}" ${p.id === lead.assigned_to ? 'selected' : ''}>${escapeHtml(profileName(p))}</option>`).join('');
+    $('ci-valor').value = lead.valor != null ? lead.valor : '';
+    $('ci-notes').value = lead.observacoes || '';
+
+    renderLeadHistory(leadId);
+  }
+
+  async function loadLeadHistory(leadId) {
+    const { data } = await supabase.from('lead_history')
+      .select('*').eq('lead_id', leadId)
+      .order('alterado_em', { ascending: false }).limit(20);
+    state.leadHistory[leadId] = data || [];
+  }
+
+  function renderLeadHistory(leadId) {
+    const el = $('ci-history');
+    if (!el) return;
+    const h = state.leadHistory[leadId];
+    if (h === undefined) {
+      el.innerHTML = '<div class="ci-hist-empty">Carregando…</div>';
+      loadLeadHistory(leadId).then(() => {
+        if (state.chatInfoLeadId === leadId) renderLeadHistory(leadId);
+      });
+      return;
+    }
+    if (!h.length) {
+      el.innerHTML = '<div class="ci-hist-empty">Sem mudanças registradas ainda.</div>';
+      return;
+    }
+    el.innerHTML = h.map(e => {
+      const stage = findStage(e.status_novo);
+      return `<div class="ci-hist-item">
+        <span class="ci-hist-dot" style="background:${stage.color}"></span>
+        <div class="ci-hist-main">
+          <div class="ci-hist-txt">Movido para <strong>${escapeHtml(stage.label)}</strong></div>
+          <div class="ci-hist-meta">${formatDate(e.alterado_em)}${e.alterado_por_email ? ' · ' + escapeHtml(e.alterado_por_email) : ''}</div>
+        </div>
+      </div>`;
+    }).join('');
   }
 
   function renderChatList() {
     const list = $('chat-list');
     const term = state.chatSearchTerm.toLowerCase().trim();
 
+    // Popula o filtro de vendedor uma vez
+    const vsel = $('chat-filter-vendor');
+    if (vsel && vsel.options.length <= 1) {
+      vsel.innerHTML = '<option value="">Todos vendedores</option>' +
+        state.profiles.map(p => `<option value="${p.id}">${escapeHtml(profileName(p))}</option>`).join('');
+    }
+    const fUnread = $('chat-filter-unread');
+    if (fUnread) fUnread.classList.toggle('active', state.chatFilter.unread);
+
     let convs = state.conversations.slice();
+    // Filtro: não lidas
+    if (state.chatFilter.unread) convs = convs.filter(c => (c.unread_count || 0) > 0);
+    // Filtro: por vendedor (do lead)
+    if (state.chatFilter.vendor) {
+      convs = convs.filter(c => {
+        const lead = state.leads.find(l => l.id === c.lead_id);
+        return lead && lead.assigned_to === state.chatFilter.vendor;
+      });
+    }
     if (term) {
       convs = convs.filter(c => {
         const lead = c.leads || {};
@@ -2692,6 +2780,49 @@
     $('chat-search').addEventListener('input', e => {
       state.chatSearchTerm = e.target.value;
       renderChatList();
+    });
+
+    // Filtros de conversa
+    $('chat-filter-unread').addEventListener('click', () => {
+      state.chatFilter.unread = !state.chatFilter.unread;
+      renderChatList();
+    });
+    $('chat-filter-vendor').addEventListener('change', e => {
+      state.chatFilter.vendor = e.target.value;
+      renderChatList();
+    });
+
+    // Painel do negócio (chat-info)
+    $('ci-status').addEventListener('change', () => {
+      if (state.chatInfoLeadId) updateLead(state.chatInfoLeadId, { pipeline_status: $('ci-status').value });
+    });
+    $('ci-vendor').addEventListener('change', () => {
+      if (state.chatInfoLeadId) updateLead(state.chatInfoLeadId, { assigned_to: $('ci-vendor').value || null });
+    });
+    $('ci-valor').addEventListener('change', () => {
+      if (!state.chatInfoLeadId) return;
+      const v = $('ci-valor').value;
+      updateLead(state.chatInfoLeadId, { valor: v === '' ? null : Number(v) });
+    });
+    let ciNotesT;
+    $('ci-notes').addEventListener('input', () => {
+      clearTimeout(ciNotesT);
+      ciNotesT = setTimeout(() => {
+        if (state.chatInfoLeadId) updateLead(state.chatInfoLeadId, { observacoes: $('ci-notes').value });
+      }, 800);
+    });
+    $('ci-schedule').addEventListener('click', () => {
+      if (state.chatInfoLead) openBookingLink(state.chatInfoLead);
+    });
+    $('ci-automate').addEventListener('click', () => {
+      if (state.chatInfoLeadId) openSchedMsgModal(state.chatInfoLeadId);
+    });
+    $('ci-task').addEventListener('click', () => {
+      const nome = state.chatInfoLead ? (state.chatInfoLead.nome || '') : '';
+      openTaskModal(null, nome ? 'Follow-up: ' + nome : '');
+    });
+    $('ci-fulllead').addEventListener('click', () => {
+      if (state.chatInfoLeadId) openLeadModal(state.chatInfoLeadId);
     });
 
     // Input auto-resize + send on Enter
