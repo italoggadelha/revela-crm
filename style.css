@@ -3731,3 +3731,67 @@ a { color: inherit; text-decoration: none; }
 .proposta-act.danger:hover { background: var(--danger-bg); color: var(--danger); }
 .proposta-act svg { width: 15px; height: 15px; }
 @media (max-width: 600px) { .proposta-delivs { grid-template-columns: 1fr; } }
+
+/* ═══════════════════════════════════════════════════════════════════
+   CONSTRUTOR VISUAL DE FLUXO (automações)
+   ═══════════════════════════════════════════════════════════════════ */
+.flow-palette { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; margin-bottom: 10px; }
+.flow-palette-lb { font-size: 12px; font-weight: 700; color: var(--text-muted); }
+.flow-add-btn {
+  border: 1px dashed var(--border-strong); background: var(--surface);
+  border-radius: var(--radius-md); padding: 7px 12px; cursor: pointer;
+  font-size: 12px; font-weight: 600; color: var(--text-soft);
+  transition: all 0.15s var(--ease);
+}
+.flow-add-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.flow-canvas-wrap {
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  overflow: auto; height: 540px;
+  background-color: var(--surface-2);
+  background-image: radial-gradient(var(--border-strong) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.flow-canvas { position: relative; width: 1500px; height: 1000px; }
+.flow-edges { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.flow-edge { fill: none; stroke: var(--accent); stroke-width: 2.5; pointer-events: stroke; cursor: pointer; }
+.flow-edge:hover { stroke: var(--danger); stroke-width: 3.5; }
+.flow-edge-temp { stroke-dasharray: 5 4; opacity: 0.65; }
+
+.flow-node {
+  position: absolute; width: 220px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; box-shadow: var(--shadow);
+}
+.flow-node-trigger { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--shadow); }
+.flow-node-hd {
+  display: flex; align-items: center; gap: 7px;
+  padding: 9px 11px; cursor: grab; border-bottom: 1px solid var(--border);
+}
+.flow-node-hd:active { cursor: grabbing; }
+.flow-node-ic { font-size: 14px; }
+.flow-node-tt { flex: 1; font-size: 12px; font-weight: 700; color: var(--text); }
+.flow-node-del {
+  border: none; background: transparent; color: var(--text-faded);
+  cursor: pointer; font-weight: 700; font-size: 12px; line-height: 1;
+}
+.flow-node-del:hover { color: var(--danger); }
+.flow-node-bd { padding: 10px 11px; display: flex; flex-direction: column; gap: 6px; }
+.flow-node-bd .input-text { width: 100%; font-size: 12px; padding: 7px 9px; }
+.flow-f-text {
+  width: 100%; border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 7px 9px; font-size: 12px; font-family: inherit; resize: vertical;
+  color: var(--text); background: var(--surface); min-height: 46px;
+}
+.flow-f-text:focus, .flow-node-bd .input-text:focus { outline: none; border-color: var(--accent); }
+.flow-unit { font-size: 11.5px; color: var(--text-muted); }
+.flow-tc { margin-top: 2px; }
+.flow-tc-note { font-size: 11px; color: var(--text-faded); }
+.flow-port {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  width: 15px; height: 15px; border-radius: 50%;
+  background: var(--surface); border: 2.5px solid var(--accent);
+}
+.flow-port-in { top: -8px; }
+.flow-port-out { bottom: -8px; cursor: crosshair; background: var(--accent); }
+.flow-port-out:hover { transform: translateX(-50%) scale(1.3); }

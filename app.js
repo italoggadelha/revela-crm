@@ -2162,21 +2162,184 @@
     return div;
   }
 
+  // ═══════════════════════════════════════════════════════════════════
+  // CONSTRUTOR VISUAL DE FLUXO (drag-and-drop)
+  // ═══════════════════════════════════════════════════════════════════
+  const FLOW_NODE_META = {
+    trigger:  { ic: '⚡', label: 'Gatilho' },
+    message:  { ic: '💬', label: 'Enviar mensagem' },
+    wait:     { ic: '⏱', label: 'Esperar' },
+    tag:      { ic: '🏷️', label: 'Adicionar tag' },
+    pipeline: { ic: '📊', label: 'Mover no pipeline' },
+    webhook:  { ic: '🔗', label: 'Enviar webhook' }
+  };
+  let flowDrag = null;   // arraste de nó em andamento
+  let flowLink = null;   // criação de conexão em andamento
+  function flowGenId() { return 'n' + Math.random().toString(36).slice(2, 8); }
+
+  // Monta os nós/conexões a partir da automação
+  function flowInit(a) {
+    const nodes = [{
+      id: 'trigger', type: 'trigger',
+      x: (a.trigger_x != null ? a.trigger_x : 60), y: 30,
+      trigger_type: a.trigger_type || 'pipeline_enter',
+      trigger_config: a.trigger_config || {}
+    }];
+    (a.steps || []).forEach((s, i) => {
+      nodes.push({
+        id: s.id || flowGenId(), type: s.type,
+        x: s.x != null ? s.x : 60, y: s.y != null ? s.y : 210 + i * 160,
+        text: s.text, template: s.template, minutes: s.minutes,
+        tag: s.tag, stage: s.stage, url: s.url
+      });
+    });
+    let edges = Array.isArray(a.edges) && a.edges.length ? a.edges.map(e => ({ ...e })) : [];
+    if (!edges.length) {
+      for (let i = 0; i < nodes.length - 1; i++) edges.push({ from: nodes[i].id, to: nodes[i + 1].id });
+    }
+    state.flow = { nodes, edges };
+  }
+
+  function flowTriggerConfigHTML(type, cfg) {
+    cfg = cfg || {};
+    if (type === 'pipeline_enter') {
+      return `<select class="flow-tc-stage input-text">${state.pipeline.map(s =>
+        `<option value="${s.id}"${s.id === cfg.stage ? ' selected' : ''}>${escapeHtml(s.label)}</option>`).join('')}</select>`;
+    }
+    if (type === 'keyword_reply') {
+      return `<input class="flow-tc-keyword input-text" placeholder="palavra-chave" value="${escapeHtml(cfg.keyword || '')}">`;
+    }
+    if (type === 'schedule') {
+      return `<input type="time" class="flow-tc-time input-text" value="${escapeHtml(cfg.time || '09:00')}">`;
+    }
+    return '<div class="flow-tc-note">Dispara com qualquer mensagem do lead.</div>';
+  }
+  function flowReadTriggerConfig(el, type) {
+    if (type === 'pipeline_enter') { const s = el.querySelector('.flow-tc-stage'); return { stage: s ? s.value : '' }; }
+    if (type === 'keyword_reply') { const s = el.querySelector('.flow-tc-keyword'); return { keyword: s ? s.value.trim() : '' }; }
+    if (type === 'schedule') { const s = el.querySelector('.flow-tc-time'); return { time: s ? s.value : '09:00' }; }
+    return {};
+  }
+
+  function flowNodeEl(node) {
+    const meta = FLOW_NODE_META[node.type] || FLOW_NODE_META.message;
+    const div = document.createElement('div');
+    div.className = 'flow-node flow-node-' + node.type;
+    div.dataset.nodeId = node.id;
+    div.dataset.nodeType = node.type;
+    div.style.left = (node.x || 40) + 'px';
+    div.style.top = (node.y || 40) + 'px';
+    let body = '';
+    if (node.type === 'trigger') {
+      body = `<select class="flow-trigger-type input-text">
+          <option value="pipeline_enter">Entra numa etapa</option>
+          <option value="message_received">Recebe uma mensagem</option>
+          <option value="keyword_reply">Responde palavra-chave</option>
+          <option value="schedule">Em um horário</option>
+        </select><div class="flow-tc">${flowTriggerConfigHTML(node.trigger_type, node.trigger_config || {})}</div>`;
+    } else if (node.type === 'message') {
+      body = `<textarea class="flow-f-text" rows="2" placeholder="Mensagem... use {nome}">${escapeHtml(node.text || '')}</textarea>
+        <input class="flow-f-tpl input-text" placeholder="Template (fora da janela 24h)" value="${escapeHtml(node.template || '')}">`;
+    } else if (node.type === 'wait') {
+      body = `<input type="number" class="flow-f-min input-text" value="${node.minutes || 60}" min="1">
+        <span class="flow-unit">minutos</span>`;
+    } else if (node.type === 'tag') {
+      body = `<input class="flow-f-tag input-text" placeholder="Nome da tag" value="${escapeHtml(node.tag || '')}">`;
+    } else if (node.type === 'pipeline') {
+      body = `<select class="flow-f-stage input-text">${state.pipeline.map(s =>
+        `<option value="${s.id}">${escapeHtml(s.label)}</option>`).join('')}</select>`;
+    } else if (node.type === 'webhook') {
+      body = `<input class="flow-f-url input-text" placeholder="https://..." value="${escapeHtml(node.url || '')}">`;
+    }
+    div.innerHTML =
+      (node.type !== 'trigger' ? '<div class="flow-port flow-port-in"></div>' : '') +
+      `<div class="flow-node-hd"><span class="flow-node-ic">${meta.ic}</span>
+        <span class="flow-node-tt">${meta.label}</span>
+        ${node.type !== 'trigger' ? '<button class="flow-node-del" type="button">✕</button>' : ''}</div>
+      <div class="flow-node-bd">${body}</div>
+      <div class="flow-port flow-port-out" title="Arraste para ligar a outro bloco"></div>`;
+    if (node.type === 'trigger') {
+      const ts = div.querySelector('.flow-trigger-type');
+      ts.value = node.trigger_type || 'pipeline_enter';
+      ts.addEventListener('change', () => {
+        div.querySelector('.flow-tc').innerHTML = flowTriggerConfigHTML(ts.value, {});
+      });
+    }
+    if (node.type === 'pipeline' && node.stage) {
+      const ss = div.querySelector('.flow-f-stage'); if (ss) ss.value = node.stage;
+    }
+    div.querySelector('.flow-node-hd').addEventListener('mousedown', e => {
+      if (e.target.closest('.flow-node-del')) return;
+      e.preventDefault();
+      flowDrag = { el: div, sx: e.clientX, sy: e.clientY, ox: div.offsetLeft, oy: div.offsetTop };
+    });
+    const del = div.querySelector('.flow-node-del');
+    if (del) del.addEventListener('click', () => {
+      state.flow.nodes = state.flow.nodes.filter(n => n.id !== node.id);
+      state.flow.edges = state.flow.edges.filter(ed => ed.from !== node.id && ed.to !== node.id);
+      renderFlow();
+    });
+    div.querySelector('.flow-port-out').addEventListener('mousedown', e => {
+      e.preventDefault(); e.stopPropagation();
+      flowLink = { from: node.id };
+    });
+    return div;
+  }
+
+  function flowEdgePath(x1, y1, x2, y2, cls) {
+    const dy = Math.max(36, Math.abs(y2 - y1) / 2);
+    return `<path class="${cls}" d="M${x1},${y1} C${x1},${y1 + dy} ${x2},${y2 - dy} ${x2},${y2}"/>`;
+  }
+  function flowDrawEdges(tx, ty) {
+    const svg = $('flow-edges'), canvas = $('flow-canvas');
+    if (!svg || !canvas) return;
+    let h = '';
+    state.flow.edges.forEach((ed, i) => {
+      const a = canvas.querySelector(`.flow-node[data-node-id="${ed.from}"]`);
+      const b = canvas.querySelector(`.flow-node[data-node-id="${ed.to}"]`);
+      if (!a || !b) return;
+      h += flowEdgePath(a.offsetLeft + a.offsetWidth / 2, a.offsetTop + a.offsetHeight,
+        b.offsetLeft + b.offsetWidth / 2, b.offsetTop, 'flow-edge" data-edge="' + i);
+    });
+    if (flowLink && tx != null) {
+      const a = canvas.querySelector(`.flow-node[data-node-id="${flowLink.from}"]`);
+      if (a) h += flowEdgePath(a.offsetLeft + a.offsetWidth / 2, a.offsetTop + a.offsetHeight, tx, ty, 'flow-edge flow-edge-temp');
+    }
+    svg.innerHTML = h;
+  }
+
+  function renderFlow() {
+    const canvas = $('flow-canvas');
+    if (!canvas) return;
+    canvas.querySelectorAll('.flow-node').forEach(n => n.remove());
+    state.flow.nodes.forEach(n => canvas.appendChild(flowNodeEl(n)));
+    flowDrawEdges();
+  }
+
+  function flowAddNode(type) {
+    const k = state.flow.nodes.length;
+    const n = { id: flowGenId(), type, x: 90 + (k % 3) * 30, y: 150 + k * 40 };
+    if (type === 'wait') n.minutes = 60;
+    state.flow.nodes.push(n);
+    renderFlow();
+  }
+
   function renderAutomationBuilder(id) {
     let a;
     const existing = state.automations.find(x => x.id === id);
     if (id === 'new' || !existing) {
-      a = { id: 'new', name: '', trigger_type: 'pipeline_enter', trigger_config: {}, steps: [], active: false };
+      a = { id: 'new', name: '', trigger_type: 'pipeline_enter', trigger_config: {}, steps: [], edges: [], active: false };
     } else {
       a = JSON.parse(JSON.stringify(existing));
     }
     state.editingAutomation = a;
+    flowInit(a);
     const builder = $('autopanel-builder');
     builder.innerHTML = `
       <div class="settings-section-head">
         <div>
           <div class="settings-title">${a.id === 'new' ? 'Nova automação' : 'Editar automação'}</div>
-          <div class="settings-desc">Defina o gatilho e os passos. Arraste os passos pelo ⠿ para reordenar.</div>
+          <div class="settings-desc">Adicione blocos, arraste pelo cabeçalho para posicionar e ligue-os pela bolinha inferior (⬤). Clique numa linha para removê-la.</div>
         </div>
         <button class="btn-primary" id="auto-save"><svg><use href="#i-check"/></svg> Salvar</button>
       </div>
@@ -2187,43 +2350,29 @@
       <label class="perm-check" style="display:inline-flex;width:auto;margin:4px 0 10px">
         <input type="checkbox" id="auto-active"><span>Automação ativa</span>
       </label>
-      <div class="field-block">
-        <label class="field-block-label">Gatilho — quando a automação dispara</label>
-        <select class="input-text" id="auto-trigger">
-          <option value="pipeline_enter">Quando o lead entra numa etapa do pipeline</option>
-          <option value="message_received">Quando o lead envia uma mensagem</option>
-          <option value="keyword_reply">Quando o lead responde com uma palavra-chave</option>
-          <option value="schedule">Em um horário do dia</option>
-        </select>
+      <div class="flow-palette">
+        <span class="flow-palette-lb">Adicionar bloco:</span>
+        <button class="flow-add-btn" type="button" data-add="message">💬 Mensagem</button>
+        <button class="flow-add-btn" type="button" data-add="wait">⏱ Esperar</button>
+        <button class="flow-add-btn" type="button" data-add="tag">🏷️ Tag</button>
+        <button class="flow-add-btn" type="button" data-add="pipeline">📊 Pipeline</button>
+        <button class="flow-add-btn" type="button" data-add="webhook">🔗 Webhook</button>
       </div>
-      <div id="auto-trigger-config"></div>
-      <div class="field-block">
-        <label class="field-block-label">Blocos — o que o bot faz (arraste pelo ⠿ para reordenar)</label>
-        <div class="autosteps" id="autosteps"></div>
-        <div class="autostep-add">
-          <button class="autostep-addbtn" type="button" data-add="message">💬 Mensagem</button>
-          <button class="autostep-addbtn" type="button" data-add="wait">⏱ Esperar</button>
-          <button class="autostep-addbtn" type="button" data-add="tag">🏷️ Tag</button>
-          <button class="autostep-addbtn" type="button" data-add="pipeline">📊 Pipeline</button>
-          <button class="autostep-addbtn" type="button" data-add="webhook">🔗 Webhook</button>
-        </div>
+      <div class="flow-canvas-wrap">
+        <div class="flow-canvas" id="flow-canvas"><svg class="flow-edges" id="flow-edges"></svg></div>
       </div>
       ${a.id !== 'new'
-        ? '<button class="modal-btn modal-btn-danger" id="auto-delete" style="margin-top:8px"><svg><use href="#i-trash"/></svg>Excluir automação</button>'
+        ? '<button class="modal-btn modal-btn-danger" id="auto-delete" style="margin-top:10px"><svg><use href="#i-trash"/></svg>Excluir automação</button>'
         : ''}
     `;
     $('auto-name').value = a.name || '';
     $('auto-active').checked = !!a.active;
-    $('auto-trigger').value = a.trigger_type;
-    renderAutoTriggerConfig(a.trigger_type, a.trigger_config);
-    const stepsEl = $('autosteps');
-    (a.steps || []).forEach(s => stepsEl.appendChild(makeStepEl(s)));
-    if (window.Sortable) Sortable.create(stepsEl, { handle: '.autostep-drag', animation: 150 });
-
-    $('auto-trigger').addEventListener('change', () =>
-      renderAutoTriggerConfig($('auto-trigger').value, {}));
-    $$('.autostep-addbtn').forEach(b => b.addEventListener('click', () =>
-      stepsEl.appendChild(makeStepEl({ type: b.dataset.add, text: '', minutes: 60 }))));
+    renderFlow();
+    $$('.flow-add-btn').forEach(b => b.addEventListener('click', () => flowAddNode(b.dataset.add)));
+    $('flow-edges').addEventListener('click', e => {
+      const p = e.target.closest('[data-edge]');
+      if (p) { state.flow.edges.splice(Number(p.dataset.edge), 1); flowDrawEdges(); }
+    });
     $('auto-save').addEventListener('click', saveAutomation);
     const del = $('auto-delete');
     if (del) del.addEventListener('click', () => deleteAutomation(a.id));
@@ -2233,22 +2382,35 @@
     const a = state.editingAutomation;
     const name = $('auto-name').value.trim();
     if (!name) { toast('Dê um nome à automação', 'error'); return; }
-    const triggerType = $('auto-trigger').value;
-    const steps = $$('#autosteps .autostep').map(el => {
-      const t = el.dataset.type;
-      if (t === 'wait') return { type: 'wait', minutes: Number(el.querySelector('.autostep-min').value) || 0 };
-      if (t === 'tag') return { type: 'tag', tag: el.querySelector('.autostep-tag').value.trim() };
-      if (t === 'pipeline') return { type: 'pipeline', stage: el.querySelector('.autostep-stage').value };
-      if (t === 'webhook') return { type: 'webhook', url: el.querySelector('.autostep-url').value.trim() };
-      return {
-        type: 'message',
-        text: el.querySelector('.autostep-text').value,
-        template: el.querySelector('.autostep-tpl').value.trim()
-      };
+    // Lê os nós do canvas
+    let triggerType = 'pipeline_enter', triggerConfig = {};
+    const steps = [];
+    $$('#flow-canvas .flow-node').forEach(el => {
+      const id = el.dataset.nodeId, type = el.dataset.nodeType;
+      const x = el.offsetLeft, y = el.offsetTop;
+      if (type === 'trigger') {
+        triggerType = el.querySelector('.flow-trigger-type').value;
+        triggerConfig = flowReadTriggerConfig(el, triggerType);
+        return;
+      }
+      const node = { id, type, x, y };
+      if (type === 'message') {
+        node.text = el.querySelector('.flow-f-text').value;
+        node.template = el.querySelector('.flow-f-tpl').value.trim();
+      } else if (type === 'wait') {
+        node.minutes = Number(el.querySelector('.flow-f-min').value) || 0;
+      } else if (type === 'tag') {
+        node.tag = el.querySelector('.flow-f-tag').value.trim();
+      } else if (type === 'pipeline') {
+        node.stage = el.querySelector('.flow-f-stage').value;
+      } else if (type === 'webhook') {
+        node.url = el.querySelector('.flow-f-url').value.trim();
+      }
+      steps.push(node);
     });
     const payload = {
-      name, trigger_type: triggerType, trigger_config: readTriggerConfig(triggerType),
-      steps, active: $('auto-active').checked
+      name, trigger_type: triggerType, trigger_config: triggerConfig,
+      steps, edges: state.flow.edges, active: $('auto-active').checked
     };
     const btn = $('auto-save');
     btn.disabled = true;
@@ -4022,6 +4184,41 @@
       state.playbookTab = btn.dataset.ptab;
       renderPlaybook();
       btn.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+    });
+
+    // Construtor de fluxo: arrastar nós e criar conexões
+    document.addEventListener('mousemove', e => {
+      if (flowDrag) {
+        const nx = Math.max(0, flowDrag.ox + (e.clientX - flowDrag.sx));
+        const ny = Math.max(0, flowDrag.oy + (e.clientY - flowDrag.sy));
+        flowDrag.el.style.left = nx + 'px';
+        flowDrag.el.style.top = ny + 'px';
+        flowDrawEdges();
+      } else if (flowLink) {
+        const canvas = $('flow-canvas');
+        if (canvas) {
+          const r = canvas.getBoundingClientRect();
+          flowDrawEdges(e.clientX - r.left + canvas.scrollLeft, e.clientY - r.top + canvas.scrollTop);
+        }
+      }
+    });
+    document.addEventListener('mouseup', e => {
+      if (flowDrag) {
+        const n = state.flow.nodes.find(x => x.id === flowDrag.el.dataset.nodeId);
+        if (n) { n.x = flowDrag.el.offsetLeft; n.y = flowDrag.el.offsetTop; }
+        flowDrag = null;
+      }
+      if (flowLink) {
+        const target = e.target.closest('.flow-node');
+        if (target && target.dataset.nodeId !== flowLink.from && target.dataset.nodeType !== 'trigger') {
+          const to = target.dataset.nodeId;
+          if (!state.flow.edges.some(ed => ed.from === flowLink.from && ed.to === to)) {
+            state.flow.edges.push({ from: flowLink.from, to });
+          }
+        }
+        flowLink = null;
+        flowDrawEdges();
+      }
     });
 
     // ESC fecha modais
