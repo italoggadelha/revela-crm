@@ -195,8 +195,8 @@
   function whatsappLink(phone, fname) {
     const d = phoneDigits(phone); if (!d) return '#';
     const txt = fname
-      ? `Oi ${fname}, aqui é da equipe REVELA. Vi o seu diagnóstico e queria conversar.`
-      : 'Oi! Aqui é da equipe REVELA.';
+      ? `Oi ${fname}, aqui é da equipe MyLion. Vi o seu diagnóstico e queria conversar.`
+      : 'Oi! Aqui é da equipe MyLion.';
     return `https://wa.me/${d}?text=${encodeURIComponent(txt)}`;
   }
   function instagramLink(handle) { const u = igUsername(handle); return u ? `https://instagram.com/${u}` : '#'; }
@@ -363,8 +363,11 @@
       renderAll();
       renderNotifications();
       subscribeRealtime();
-      // Garante que a view atual é uma permitida
-      ensureValidView();
+      // View inicial: respeita o hash da URL (não volta sempre pro Dashboard)
+      const hv = (location.hash || '').replace('#', '');
+      const hvBtn = hv && document.querySelector('.nav-item[data-view="' + hv + '"]');
+      if (hvBtn && hvBtn.style.display !== 'none') switchView(hv);
+      else ensureValidView();
       // Conexão Google: trata retorno do OAuth e atualiza status
       handleGoogleOAuthReturn();
       refreshGoogleStatus();
@@ -593,6 +596,8 @@
   // ═══════════════════════════════════════════════════════════════════
   function switchView(name) {
     state.currentView = name;
+    // Reflete a view atual no endereço (sobrevive ao recarregar a página)
+    if (location.hash.replace('#', '') !== name) location.hash = name;
     $$('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.view === name));
     $$('.view').forEach(v => v.classList.toggle('active', v.dataset.view === name));
 
@@ -2248,7 +2253,7 @@
       <div class="playbook-hero">
         <span class="playbook-hero-ic">${active.icon || '📄'}</span>
         <div>
-          <div class="playbook-hero-kicker">Capítulo ${idx + 1} de ${tabs.length} · Playbook REVELA</div>
+          <div class="playbook-hero-kicker">Capítulo ${idx + 1} de ${tabs.length} · Playbook MyLion</div>
           <h2 class="playbook-hero-title">${escapeHtml(active.label)}</h2>
         </div>
       </div>
@@ -2412,7 +2417,7 @@
     $('wa-business-id').value = c.business_account_id || '';
     $('wa-token').value = c.token || '';
     $('wa-verify-token').value = c.verify_token || '';
-    $('wa-tpl-novo-lead').value = c.template_novo_lead || 'novo_lead_revela';
+    $('wa-tpl-novo-lead').value = c.template_novo_lead || 'novo_lead_mylion';
     $('wa-tpl-iniciar').value = c.template_iniciar_conversa || 'iniciar_conversa';
     $('wa-webhook-url').textContent = CONFIG.SUPABASE_URL + '/functions/v1/whatsapp-webhook';
 
@@ -2444,7 +2449,7 @@
       business_account_id: $('wa-business-id').value.trim() || null,
       token: $('wa-token').value.trim() || null,
       verify_token: $('wa-verify-token').value.trim() || null,
-      template_novo_lead: $('wa-tpl-novo-lead').value.trim() || 'novo_lead_revela',
+      template_novo_lead: $('wa-tpl-novo-lead').value.trim() || 'novo_lead_mylion',
       template_iniciar_conversa: $('wa-tpl-iniciar').value.trim() || 'iniciar_conversa',
       updated_at: new Date().toISOString(),
       updated_by: state.user.id
@@ -3446,6 +3451,14 @@
     // Navegação
     $$('.nav-item').forEach(b => {
       b.addEventListener('click', () => switchView(b.dataset.view));
+    });
+    // Voltar/avançar do navegador respeita a view no hash
+    window.addEventListener('hashchange', () => {
+      const hv = (location.hash || '').replace('#', '');
+      if (hv && hv !== state.currentView) {
+        const btn = document.querySelector('.nav-item[data-view="' + hv + '"]');
+        if (btn && btn.style.display !== 'none') switchView(hv);
+      }
     });
 
     // Notificações

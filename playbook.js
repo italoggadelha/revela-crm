@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════
-// PLAYBOOK DE VENDAS — REVELA
+// PLAYBOOK DE VENDAS — MyLion
 // Conteúdo do "Meu Playbook". Texto estático e confiável (sem dado de
 // usuário) — renderizado via innerHTML pelo app.js.
 // Para editar o playbook, altere os blocos `html` abaixo.
@@ -11,8 +11,8 @@ window.PLAYBOOK_CONTENT = [
     icon: '🎯',
     label: 'Visão geral',
     html: `
-      <h3>O que a REVELA vende</h3>
-      <p class="pb-lead">A REVELA não vende "post bonito" nem "gestão de Instagram". Vende um
+      <h3>O que a MyLion vende</h3>
+      <p class="pb-lead">A MyLion não vende "post bonito" nem "gestão de Instagram". Vende um
       <strong>sistema de crescimento de faturamento</strong> para negócios de estética e saúde —
       uma máquina de aquisição de clientes previsível.</p>
 
@@ -41,11 +41,11 @@ window.PLAYBOOK_CONTENT = [
 
       <div class="pb-callout">
         <strong>Filosofia de venda:</strong> a venda acontece quando o cliente percebe sozinho que
-        o problema dele não é "falta de cliente", e sim <em>falta de método</em>. O vendedor REVELA
+        o problema dele não é "falta de cliente", e sim <em>falta de método</em>. O vendedor MyLion
         não empurra — ele faz o diagnóstico e o cliente pede ajuda.
       </div>
 
-      <h4>O processo comercial REVELA</h4>
+      <h4>O processo comercial MyLion</h4>
       <ol class="pb-steps">
         <li><strong>Conexão</strong> — quebrar o gelo e gerar rapport.</li>
         <li><strong>Diagnóstico</strong> — entender o cenário com perguntas, não com pitch.</li>
@@ -92,7 +92,7 @@ window.PLAYBOOK_CONTENT = [
       </ul>
 
       <div class="pb-callout warn">
-        Desqualificar não é perder venda — é proteger seu tempo e a reputação da REVELA.
+        Desqualificar não é perder venda — é proteger seu tempo e a reputação da MyLion.
         Cliente errado não tem resultado, não renova e não indica.
       </div>
     `
@@ -124,7 +124,7 @@ window.PLAYBOOK_CONTENT = [
         <strong>O dado que abre os olhos do lead:</strong> 59% dos gestores de clínica colocam
         "aumentar o faturamento" como prioridade — mas apenas <strong>24% têm uma estratégia
         comercial estruturada</strong>. O resto investe em marketing solto e nunca alcança
-        estabilidade. <em>É exatamente esse buraco que a REVELA preenche.</em>
+        estabilidade. <em>É exatamente esse buraco que a MyLion preenche.</em>
       </div>
 
       <h4>Por que tantas clínicas ficam para trás</h4>
@@ -149,7 +149,7 @@ window.PLAYBOOK_CONTENT = [
     html: `
       <h3>A call de diagnóstico</h3>
       <p class="pb-lead">Regra de ouro: <strong>ouça 80%, fale 20%</strong>. Quem faz as perguntas
-      conduz a conversa. O objetivo não é apresentar a REVELA — é fazer o lead verbalizar a própria
+      conduz a conversa. O objetivo não é apresentar a MyLion — é fazer o lead verbalizar a própria
       dor.</p>
 
       <h4>1. Perguntas de situação — entenda o cenário</h4>
@@ -197,7 +197,7 @@ window.PLAYBOOK_CONTENT = [
       <p class="pb-lead">Nunca apresente a oferta como "serviço de marketing". Apresente como o que
       ela realmente é: <strong>uma agenda previsível e retorno sobre investimento</strong>.</p>
 
-      <h4>O que a REVELA entrega</h4>
+      <h4>O que a MyLion entrega</h4>
       <div class="pb-grid">
         <div class="pb-card">
           <h4>Funil de vendas</h4>
@@ -235,7 +235,7 @@ window.PLAYBOOK_CONTENT = [
       <h4>Estrutura de investimento</h4>
       <p>O investimento tem duas partes: a <strong>verba de mídia</strong> (vai para o Meta/Google —
       mínimo realista de R$ 1.500–2.000/mês para o algoritmo ter volume) e o <strong>fee de gestão
-      REVELA</strong> (estratégia, funil, criativos e acompanhamento). Deixe isso claro: a verba não
+      MyLion</strong> (estratégia, funil, criativos e acompanhamento). Deixe isso claro: a verba não
       é nossa receita — é combustível do resultado dele.</p>
     `
   },
@@ -394,7 +394,7 @@ window.PLAYBOOK_CONTENT = [
     label: 'Métricas & metas',
     html: `
       <h3>Métricas que todo vendedor acompanha</h3>
-      <p class="pb-lead">O que não é medido não melhora. O vendedor REVELA conhece os próprios
+      <p class="pb-lead">O que não é medido não melhora. O vendedor MyLion conhece os próprios
       números e usa o CRM como ferramenta de trabalho, não como burocracia.</p>
 
       <h4>Benchmarks do funil (referência do mercado)</h4>
