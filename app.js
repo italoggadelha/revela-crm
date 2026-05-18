@@ -60,6 +60,9 @@
     automations: [],
     editingAutomation: null,
     autoSelected: 'reminders',
+    // Propostas
+    proposals: [],
+    editingProposal: null,
     // Chat
     conversations: [],
     messages: {},                 // { conversationId: [msgs] }
@@ -217,9 +220,9 @@
   // ─── Permissões ───
   function defaultPerms(role) {
     if (role === 'admin') {
-      return { dashboard: true, pipeline: true, chat: true, contacts: true, tasks: true, agenda: true, automacoes: true, tracking: true, playbook: true, settings: true };
+      return { dashboard: true, pipeline: true, chat: true, contacts: true, tasks: true, agenda: true, automacoes: true, propostas: true, tracking: true, playbook: true, settings: true };
     }
-    return { dashboard: true, pipeline: true, chat: true, contacts: true, tasks: true, agenda: true, automacoes: true, tracking: true, playbook: true, settings: false };
+    return { dashboard: true, pipeline: true, chat: true, contacts: true, tasks: true, agenda: true, automacoes: true, propostas: true, tracking: true, playbook: true, settings: false };
   }
 
   function userPerms() {
@@ -425,7 +428,7 @@
     applyNavPermissions();
 
     // Load tudo
-    Promise.all([loadPipeline(), loadProfiles(), loadLeads(), loadConversations(), loadTasks(), loadAppointments(), loadScheduledMessages(), loadNotifications(), loadAutomations()]).then(() => {
+    Promise.all([loadPipeline(), loadProfiles(), loadLeads(), loadConversations(), loadTasks(), loadAppointments(), loadScheduledMessages(), loadNotifications(), loadAutomations(), loadProposals()]).then(() => {
       renderAll();
       renderNotifications();
       subscribeRealtime();
@@ -453,8 +456,8 @@
       const fallback = ['dashboard', 'pipeline', 'contacts', 'tracking', 'settings']
         .find(v => canSee(v === 'pipeline' ? 'pipeline' : v));
       // map de view name pra permission
-      const order = ['dashboard', 'pipeline', 'contacts', 'tasks', 'agenda', 'automacoes', 'tracking', 'playbook', 'settings'];
-      const perms = ['dashboard', 'pipeline', 'contacts', 'tasks', 'agenda', 'automacoes', 'tracking', 'playbook', 'settings'];
+      const order = ['dashboard', 'pipeline', 'contacts', 'tasks', 'agenda', 'automacoes', 'propostas', 'tracking', 'playbook', 'settings'];
+      const perms = ['dashboard', 'pipeline', 'contacts', 'tasks', 'agenda', 'automacoes', 'propostas', 'tracking', 'playbook', 'settings'];
       for (let i = 0; i < order.length; i++) {
         if (canSee(perms[i])) {
           // converter pipeline → kanban (view ID)
@@ -608,6 +611,10 @@
         await loadAutomations();
         if (state.currentView === 'automacoes') renderAutoList();
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'proposals' }, async () => {
+        await loadProposals();
+        if (state.currentView === 'propostas') renderPropostas();
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, async (payload) => {
         await loadNotifications();
         renderNotifications();
@@ -675,6 +682,7 @@
       tasks: 'Tarefas',
       agenda: 'Agenda',
       automacoes: 'Automações',
+      propostas: 'Propostas',
       tracking: 'Traqueamento',
       playbook: 'Playbook',
       settings: 'Configurações'
@@ -689,6 +697,7 @@
     if (name === 'tasks')      renderTasks();
     if (name === 'agenda')     renderAgenda();
     if (name === 'automacoes') renderAutomacoes();
+    if (name === 'propostas')  renderPropostas();
     if (name === 'tracking')   renderTracking();
     if (name === 'playbook')   renderPlaybook();
     if (name === 'settings')  renderSettings();
@@ -2413,6 +2422,126 @@
     await supabase.from('notifications').update({ read: true }).in('id', ids);
   }
 
+  // ═══════════════════════════════════════════════════════════════════
+  // PROPOSTAS COMERCIAIS
+  // ═══════════════════════════════════════════════════════════════════
+  const PROPOSAL_DELIVERABLES = [
+    'Construção de funil de vendas',
+    'Gestão de tráfego pago',
+    'Gestão de social media',
+    'Criação de criativos',
+    'CRM e automações',
+    'Treinamento de vendas',
+    'Consultoria de vendas',
+    'Equipe de vendas'
+  ];
+
+  async function loadProposals() {
+    const { data, error } = await supabase
+      .from('proposals').select('*').order('created_at', { ascending: false });
+    if (error) { console.warn('Proposals falhou', error); state.proposals = []; return; }
+    state.proposals = data || [];
+  }
+
+  function proposalLink(id) {
+    return location.origin + '/proposta.html?id=' + id;
+  }
+
+  function renderPropostas() {
+    const list = $('propostas-list');
+    if (!list) return;
+    if (!state.proposals.length) {
+      list.innerHTML = `<div class="empty-state"><div class="empty-state-text">
+        Nenhuma proposta ainda. Clique em "Nova proposta".</div></div>`;
+      return;
+    }
+    const stLabel = { draft: 'Rascunho', accepted: 'Aceita' };
+    list.innerHTML = state.proposals.map(p => `
+      <div class="proposta-row">
+        <div class="proposta-row-main" data-prop-open="${p.id}">
+          <div class="proposta-row-title">${escapeHtml(p.client_name)}</div>
+          <div class="proposta-row-sub">${escapeHtml(p.client_niche || 'Sem nicho')} · ${(p.deliverables || []).length} entregas</div>
+          ${p.status === 'accepted' && p.accepted_data
+            ? `<div class="proposta-row-acc">✅ Aceita por ${escapeHtml(p.accepted_data.nome || 'cliente')}</div>` : ''}
+        </div>
+        <span class="proposta-st proposta-st-${p.status}">${stLabel[p.status] || p.status}</span>
+        <button class="proposta-act" data-prop-link="${p.id}" title="Copiar link da apresentação">
+          <svg><use href="#i-report"/></svg></button>
+        <button class="proposta-act danger" data-prop-del="${p.id}" title="Excluir">
+          <svg><use href="#i-trash"/></svg></button>
+      </div>`).join('');
+  }
+
+  function openProposalModal(id) {
+    const p = id ? state.proposals.find(x => x.id === id) : null;
+    state.editingProposal = p || null;
+    $('proposta-modal-title').textContent = p ? 'Editar proposta' : 'Nova proposta';
+    const sel = $('proposta-lead');
+    sel.innerHTML = '<option value="">— Nenhum —</option>' +
+      state.leads.map(l => `<option value="${l.id}">${escapeHtml(l.nome || 'Lead')}</option>`).join('');
+    sel.value = p ? (p.lead_id || '') : '';
+    $('proposta-client').value = p ? (p.client_name || '') : '';
+    $('proposta-niche').value = p ? (p.client_niche || '') : '';
+    $('proposta-context').value = p ? (p.client_context || '') : '';
+    $('proposta-payment').value = p ? (p.payment || '') : '';
+    $('proposta-transcription').value = p ? (p.transcription || '') : '';
+    const chosen = p ? (p.deliverables || []) : PROPOSAL_DELIVERABLES.slice(0, 3);
+    $('proposta-delivs').innerHTML = PROPOSAL_DELIVERABLES.map(d =>
+      `<label class="perm-check"><input type="checkbox" value="${escapeHtml(d)}" ${chosen.includes(d) ? 'checked' : ''}><span>${escapeHtml(d)}</span></label>`
+    ).join('');
+    $('proposta-extra').value = chosen.filter(d => !PROPOSAL_DELIVERABLES.includes(d)).join('\n');
+    $('proposta-delete').style.display = p ? '' : 'none';
+    $('proposta-modal-backdrop').classList.add('show');
+  }
+
+  async function saveProposal() {
+    const client = $('proposta-client').value.trim();
+    const context = $('proposta-context').value.trim();
+    const payment = $('proposta-payment').value.trim();
+    if (!client) { toast('Informe o nome do cliente', 'error'); return; }
+    if (!context) { toast('Descreva o contexto do cliente', 'error'); return; }
+    if (!payment) { toast('Informe a forma de pagamento', 'error'); return; }
+    const delivs = $$('#proposta-delivs input:checked').map(c => c.value);
+    const extra = $('proposta-extra').value.split('\n').map(s => s.trim()).filter(Boolean);
+    const patch = {
+      lead_id: $('proposta-lead').value || null,
+      client_name: client,
+      client_niche: $('proposta-niche').value.trim() || null,
+      client_context: context,
+      deliverables: delivs.concat(extra),
+      payment,
+      transcription: $('proposta-transcription').value.trim() || null
+    };
+    const editing = state.editingProposal;
+    const btn = $('proposta-save');
+    btn.disabled = true;
+    let saved, error;
+    if (editing) {
+      ({ data: saved, error } = await supabase.from('proposals').update(patch).eq('id', editing.id).select().single());
+    } else {
+      patch.vendedor_id = state.user.id;
+      ({ data: saved, error } = await supabase.from('proposals').insert(patch).select().single());
+    }
+    btn.disabled = false;
+    if (error) { toast('Erro: ' + error.message, 'error'); return; }
+    await loadProposals();
+    renderPropostas();
+    closeAllModals();
+    // Copia o link da apresentação para a área de transferência
+    const link = proposalLink(saved.id);
+    if (navigator.clipboard) navigator.clipboard.writeText(link).catch(() => {});
+    toast('Proposta salva — link da apresentação copiado', 'success');
+  }
+
+  async function deleteProposal(id) {
+    if (!confirm('Excluir esta proposta?')) return;
+    const { error } = await supabase.from('proposals').delete().eq('id', id);
+    if (error) { toast('Erro: ' + error.message, 'error'); return; }
+    state.proposals = state.proposals.filter(p => p.id !== id);
+    renderPropostas();
+    toast('Proposta excluída', 'success');
+  }
+
   function renderSettings() {
     // Meu perfil é sempre renderizado (todos têm acesso ao próprio perfil)
     renderProfileSection();
@@ -3456,6 +3585,8 @@
     $('task-modal-backdrop').classList.remove('show');
     $('appt-modal-backdrop').classList.remove('show');
     $('schedmsg-modal-backdrop').classList.remove('show');
+    $('proposta-modal-backdrop').classList.remove('show');
+    state.editingProposal = null;
     state.currentLead = null;
     state.editingLead = null;
     state.editingTask = null;
@@ -3847,6 +3978,31 @@
     $('btn-new-automation').addEventListener('click', () => {
       showAutoPanel('new');
       renderAutoList();
+    });
+
+    // Propostas
+    $('btn-new-proposal').addEventListener('click', () => openProposalModal(null));
+    $('proposta-modal-close').addEventListener('click', closeAllModals);
+    $('proposta-cancel').addEventListener('click', closeAllModals);
+    $('proposta-modal-backdrop').addEventListener('click', e => {
+      if (e.target === $('proposta-modal-backdrop')) closeAllModals();
+    });
+    $('proposta-save').addEventListener('click', saveProposal);
+    $('proposta-delete').addEventListener('click', () => {
+      if (state.editingProposal) deleteProposal(state.editingProposal.id);
+    });
+    $('propostas-list').addEventListener('click', e => {
+      const open = e.target.closest('[data-prop-open]');
+      if (open) { openProposalModal(open.dataset.propOpen); return; }
+      const del = e.target.closest('[data-prop-del]');
+      if (del) { deleteProposal(del.dataset.propDel); return; }
+      const link = e.target.closest('[data-prop-link]');
+      if (link) {
+        const url = proposalLink(link.dataset.propLink);
+        const done = () => toast('Link da apresentação copiado!', 'success');
+        if (navigator.clipboard) navigator.clipboard.writeText(url).then(done).catch(done);
+        else done();
+      }
     });
     $('schedmsg-modal-close').addEventListener('click', closeAllModals);
     $('schedmsg-cancel').addEventListener('click', closeAllModals);

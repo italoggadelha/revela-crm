@@ -3700,3 +3700,34 @@ a { color: inherit; text-decoration: none; }
 .autostep-hint { font-size: 11px; color: var(--text-faded); margin-top: 6px; line-height: 1.5; }
 .autostep-bd .input-text, .autostep-bd .notes-textarea { width: 100%; }
 .autostep-bd .autostep-min { width: 90px !important; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   PROPOSTAS COMERCIAIS
+   ═══════════════════════════════════════════════════════════════════ */
+.proposta-intro { font-size: 12.5px; color: var(--text-muted); flex: 1; align-self: center; }
+.proposta-delivs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; }
+.proposta-row {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 13px 15px; box-shadow: var(--shadow-sm);
+}
+.proposta-row-main { flex: 1; min-width: 0; cursor: pointer; }
+.proposta-row-title { font-size: 14px; font-weight: 700; color: var(--text); }
+.proposta-row-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.proposta-row-acc { font-size: 11.5px; color: var(--success); font-weight: 600; margin-top: 3px; }
+.proposta-st {
+  flex-shrink: 0; font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; padding: 3px 9px; border-radius: var(--radius);
+}
+.proposta-st-draft { background: var(--surface-3); color: var(--text-muted); }
+.proposta-st-accepted { background: var(--success-bg); color: var(--success); }
+.proposta-act {
+  width: 32px; height: 32px; flex-shrink: 0; border: none; cursor: pointer;
+  background: var(--surface-2); border-radius: var(--radius); color: var(--text-muted);
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s var(--ease);
+}
+.proposta-act:hover { background: var(--accent-bg); color: var(--accent); }
+.proposta-act.danger:hover { background: var(--danger-bg); color: var(--danger); }
+.proposta-act svg { width: 15px; height: 15px; }
+@media (max-width: 600px) { .proposta-delivs { grid-template-columns: 1fr; } }

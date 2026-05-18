@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Proposta Comercial · MyLion</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Lora:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  :root{ --accent:#0F766E; --accent2:#14B8A6; --ink:#1A2B33; --muted:#5B6B72;
+    --bg:#F4F6F6; --line:#E4E8E8; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--ink);line-height:1.6}
+  .wrap{max-width:760px;margin:0 auto;padding:0 0 60px}
+  .pp-loading,.pp-error{padding:80px 30px;text-align:center;color:var(--muted)}
+
+  /* Capa */
+  .pp-hero{
+    background:linear-gradient(135deg,#0F766E 0%,#0D9488 55%,#14B8A6 100%);
+    color:#fff;padding:60px 44px 52px;text-align:center}
+  .pp-brand{font-weight:800;letter-spacing:.16em;font-size:13px;opacity:.85}
+  .pp-hero h1{font-family:'Lora',serif;font-size:38px;font-weight:700;margin:18px 0 6px}
+  .pp-hero .pp-for{font-size:16px;opacity:.92}
+  .pp-hero .pp-meta{font-size:12.5px;opacity:.7;margin-top:18px}
+
+  /* Seções */
+  .pp-sec{background:#fff;margin:18px 22px 0;border:1px solid var(--line);
+    border-radius:18px;padding:30px 32px}
+  .pp-kicker{font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--accent)}
+  .pp-sec h2{font-family:'Lora',serif;font-size:24px;font-weight:700;margin:6px 0 14px}
+  .pp-sec p{font-size:14.5px;color:var(--muted);margin:9px 0}
+  .pp-sec p strong{color:var(--ink)}
+
+  /* Entregas */
+  .pp-deliv{display:flex;flex-direction:column;gap:10px;margin-top:6px}
+  .pp-deliv-item{display:flex;gap:13px;align-items:flex-start;
+    background:#F0FDFA;border:1px solid #CCFBF1;border-radius:13px;padding:14px 16px}
+  .pp-check{width:24px;height:24px;flex-shrink:0;border-radius:50%;
+    background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;
+    font-size:14px;font-weight:800}
+  .pp-deliv-item span{font-size:14.5px;font-weight:600;color:var(--ink);padding-top:1px}
+
+  /* Investimento */
+  .pp-invest{background:linear-gradient(135deg,#0F766E,#14B8A6);color:#fff;
+    border-radius:14px;padding:24px 26px;margin-top:8px}
+  .pp-invest .pp-kicker{color:rgba(255,255,255,.8)}
+  .pp-invest p{color:#fff;font-size:16px;white-space:pre-wrap;margin-top:6px}
+
+  /* Aceite */
+  .pp-accept{background:#fff;margin:18px 22px 0;border:2px solid var(--accent);
+    border-radius:18px;padding:30px 32px}
+  .pp-field{margin-top:13px}
+  .pp-field label{font-size:12.5px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px}
+  .pp-field input{width:100%;border:1px solid var(--line);border-radius:10px;
+    padding:11px 13px;font-size:14px;font-family:inherit;color:var(--ink)}
+  .pp-field input:focus{outline:none;border-color:var(--accent)}
+  .pp-grid2{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+  .pp-btn{width:100%;margin-top:20px;background:linear-gradient(135deg,#0D9488,#0F766E);
+    color:#fff;border:none;border-radius:12px;padding:16px;font-size:16px;font-weight:700;
+    cursor:pointer;font-family:inherit}
+  .pp-btn:hover{filter:brightness(1.08)}
+  .pp-btn:disabled{opacity:.5;cursor:not-allowed}
+  .pp-msg{font-size:13px;margin-top:12px;text-align:center;color:#DC2626}
+  .pp-done{background:#fff;margin:18px 22px;border-radius:18px;padding:60px 32px;text-align:center}
+  .pp-done .ic{font-size:54px}
+  .pp-done h2{font-family:'Lora',serif;font-size:26px;margin:14px 0 8px}
+  .pp-done p{font-size:14.5px;color:var(--muted)}
+  .pp-foot{text-align:center;font-size:11px;color:#9AA7AB;padding:24px}
+  @media(max-width:560px){
+    .pp-hero{padding:44px 24px 38px}.pp-hero h1{font-size:30px}
+    .pp-sec,.pp-accept{margin:14px 14px 0;padding:24px 20px}
+    .pp-grid2{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<div class="wrap" id="pp-root"><div class="pp-loading">Carregando proposta…</div></div>
+
+<script src="./config.js"></script>
+<script>
+(function(){
+  'use strict';
+  var FN = (window.CRM_CONFIG && window.CRM_CONFIG.SUPABASE_URL || '') + '/functions/v1/proposal';
+  var ID = new URLSearchParams(location.search).get('id');
+  var root = document.getElementById('pp-root');
+
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function api(payload){
+    return fetch(FN,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(Object.assign({id:ID},payload))}).then(function(r){return r.json();});
+  }
+
+  if(!ID){ root.innerHTML='<div class="pp-error">Proposta inválida.</div>'; return; }
+
+  api({action:'get'}).then(function(p){
+    if(p.error){ root.innerHTML='<div class="pp-error">'+esc(p.error)+'</div>'; return; }
+    render(p);
+  }).catch(function(){ root.innerHTML='<div class="pp-error">Não foi possível carregar a proposta.</div>'; });
+
+  // Texto de abertura, montado a partir do nicho e das entregas
+  function intro(p){
+    var nicho = p.client_niche ? ('no mercado de '+p.client_niche) : 'no seu mercado';
+    return 'Para crescer '+nicho+' com previsibilidade, não basta esforço — é preciso método. '+
+      'Esta proposta foi desenhada sob medida para '+(p.client_name||'a sua empresa')+
+      ', combinando estratégia, execução e acompanhamento próximo para transformar a sua '+
+      'captação de clientes em um processo consistente e escalável.';
+  }
+
+  function render(p){
+    var deliv = (p.deliverables||[]).map(function(d){
+      return '<div class="pp-deliv-item"><span class="pp-check">✓</span><span>'+esc(d)+'</span></div>';
+    }).join('') || '<p>—</p>';
+    var ctx = p.client_context
+      ? '<p>'+esc(p.client_context).replace(/\n/g,'<br>')+'</p>' : '';
+    var html =
+      '<div class="pp-hero">'+
+        '<div class="pp-brand">MYLION</div>'+
+        '<h1>Proposta Comercial</h1>'+
+        '<div class="pp-for">preparada para '+esc(p.client_name||'você')+'</div>'+
+        '<div class="pp-meta">Apresentado por '+esc(p.vendedor)+' · '+
+          new Date(p.created_at).toLocaleDateString('pt-BR')+'</div>'+
+      '</div>'+
+      '<div class="pp-sec"><div class="pp-kicker">Sobre o projeto</div>'+
+        '<h2>'+esc(p.client_name||'Seu projeto')+'</h2>'+
+        '<p>'+esc(intro(p))+'</p>'+ ctx +'</div>'+
+      '<div class="pp-sec"><div class="pp-kicker">Escopo</div>'+
+        '<h2>O que vamos entregar</h2><div class="pp-deliv">'+deliv+'</div></div>'+
+      (p.payment ? '<div class="pp-sec"><div class="pp-invest"><div class="pp-kicker">Investimento</div>'+
+        '<p>'+esc(p.payment)+'</p></div></div>' : '')+
+      (p.status==='accepted'
+        ? '<div class="pp-done"><div class="ic">✅</div><h2>Proposta aceita</h2>'+
+          '<p>Esta proposta já foi aceita. Em breve entraremos em contato com o contrato.</p></div>'
+        : acceptForm());
+    root.innerHTML = html;
+    if(p.status!=='accepted') wireAccept();
+  }
+
+  function acceptForm(){
+    return '<div class="pp-accept"><div class="pp-kicker">Aceite</div>'+
+      '<h2>Vamos começar?</h2>'+
+      '<p style="font-size:14px;color:var(--muted);margin:6px 0 4px">'+
+      'Preencha seus dados abaixo para aceitar a proposta. Usaremos essas informações para a confecção do contrato.</p>'+
+      '<div class="pp-field"><label>Nome completo *</label><input id="ac-nome"></div>'+
+      '<div class="pp-grid2">'+
+        '<div class="pp-field"><label>CPF / CNPJ</label><input id="ac-doc"></div>'+
+        '<div class="pp-field"><label>Empresa</label><input id="ac-empresa"></div>'+
+      '</div>'+
+      '<div class="pp-grid2">'+
+        '<div class="pp-field"><label>E-mail *</label><input id="ac-email" type="email"></div>'+
+        '<div class="pp-field"><label>Telefone</label><input id="ac-tel"></div>'+
+      '</div>'+
+      '<div class="pp-field"><label>Endereço</label><input id="ac-end"></div>'+
+      '<button class="pp-btn" id="ac-btn">Aceitar proposta</button>'+
+      '<div class="pp-msg" id="ac-msg"></div></div>'+
+      '<div class="pp-foot">MyLion · CRM</div>';
+  }
+
+  function wireAccept(){
+    document.getElementById('ac-btn').onclick=function(){
+      var d={
+        nome:val('ac-nome'), doc:val('ac-doc'), empresa:val('ac-empresa'),
+        email:val('ac-email'), telefone:val('ac-tel'), endereco:val('ac-end')
+      };
+      var msg=document.getElementById('ac-msg');
+      if(!d.nome||!d.email){ msg.textContent='Preencha nome e e-mail.'; return; }
+      var btn=document.getElementById('ac-btn');
+      btn.disabled=true; btn.textContent='Enviando…';
+      api({action:'accept',data:d}).then(function(r){
+        if(r.ok){
+          root.innerHTML='<div class="pp-done"><div class="ic">🎉</div>'+
+            '<h2>Proposta aceita!</h2><p>Obrigado, '+esc(d.nome.split(' ')[0])+'! '+
+            'Recebemos o seu aceite e vamos preparar o contrato. Em breve entramos em contato.</p></div>'+
+            '<div class="pp-foot">MyLion · CRM</div>';
+        } else {
+          btn.disabled=false; btn.textContent='Aceitar proposta';
+          msg.textContent=r.error||'Não foi possível registrar o aceite.';
+        }
+      }).catch(function(){
+        btn.disabled=false; btn.textContent='Aceitar proposta';
+        msg.textContent='Erro de conexão. Tente de novo.';
+      });
+    };
+  }
+  function val(id){ return (document.getElementById(id).value||'').trim(); }
+})();
+</script>
+</body>
+</html>

@@ -182,6 +182,10 @@
         <span class="nav-icon"><svg><use href="#i-bolt"/></svg></span>
         <span class="nav-label">Automações</span>
       </button>
+      <button class="nav-item" data-view="propostas" data-perm="propostas">
+        <span class="nav-icon"><svg><use href="#i-report"/></svg></span>
+        <span class="nav-label">Propostas</span>
+      </button>
       <button class="nav-item" data-view="tracking" data-perm="tracking">
         <span class="nav-icon"><svg><use href="#i-tracking"/></svg></span>
         <span class="nav-label">Traqueamento</span>
@@ -663,6 +667,19 @@
       </div>
     </section>
 
+    <!-- ═══════════ VIEW: PROPOSTAS ═══════════ -->
+    <section class="view" data-view="propostas">
+      <div class="tasks">
+        <div class="tasks-toolbar">
+          <div class="proposta-intro">Monte propostas comerciais — cada uma gera um link de apresentação para o cliente.</div>
+          <button class="btn-primary" id="btn-new-proposal">
+            <svg><use href="#i-plus"/></svg> Nova proposta
+          </button>
+        </div>
+        <div class="tasks-list" id="propostas-list"></div>
+      </div>
+    </section>
+
     <!-- ═══════════ VIEW: PLAYBOOK ═══════════ -->
     <section class="view" data-view="playbook">
       <div class="playbook">
@@ -1104,6 +1121,7 @@
           <label class="perm-check"><input type="checkbox" data-perm="tasks" checked><span>Tarefas</span></label>
           <label class="perm-check"><input type="checkbox" data-perm="agenda" checked><span>Agenda</span></label>
           <label class="perm-check"><input type="checkbox" data-perm="automacoes" checked><span>Automações</span></label>
+          <label class="perm-check"><input type="checkbox" data-perm="propostas" checked><span>Propostas</span></label>
           <label class="perm-check"><input type="checkbox" data-perm="tracking" checked><span>Traqueamento</span></label>
           <label class="perm-check"><input type="checkbox" data-perm="playbook" checked><span>Playbook</span></label>
           <label class="perm-check"><input type="checkbox" data-perm="settings"><span>Configurações</span></label>
@@ -1221,6 +1239,60 @@
       <button class="modal-btn modal-btn-danger" id="appt-delete" style="display:none"><svg><use href="#i-trash"/></svg>Excluir</button>
       <button class="modal-btn" id="appt-cancel">Cancelar</button>
       <button class="modal-btn modal-btn-primary" id="appt-save"><svg><use href="#i-check"/></svg>Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- MODAL: Proposta comercial                                       -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="proposta-modal-backdrop">
+  <div class="modal">
+    <header class="modal-head">
+      <div class="modal-identity">
+        <h2 class="modal-name" id="proposta-modal-title">Nova proposta</h2>
+        <p class="modal-handle">Monte a proposta — a apresentação para o cliente é gerada automaticamente</p>
+      </div>
+      <button class="modal-close" id="proposta-modal-close"><svg><use href="#i-x"/></svg></button>
+    </header>
+    <div class="modal-body">
+      <div class="field-block">
+        <label class="field-block-label">Lead vinculado (opcional)</label>
+        <select class="input-text" id="proposta-lead"></select>
+      </div>
+      <div class="field-block">
+        <label class="field-block-label">Nome do cliente *</label>
+        <input type="text" class="input-text" id="proposta-client" placeholder="Nome / empresa do cliente">
+      </div>
+      <div class="field-block">
+        <label class="field-block-label">Nicho do cliente</label>
+        <input type="text" class="input-text" id="proposta-niche" placeholder="Ex: clínica de estética">
+      </div>
+      <div class="field-block">
+        <label class="field-block-label">Sobre o cliente — contexto, dores e objetivos *</label>
+        <textarea class="notes-textarea" id="proposta-context" placeholder="Essencial para uma apresentação robusta — descreva o cenário, as dores e o que o cliente quer alcançar."></textarea>
+      </div>
+      <div class="field-block">
+        <label class="field-block-label">Entregas do projeto</label>
+        <div class="proposta-delivs" id="proposta-delivs"></div>
+      </div>
+      <div class="field-block">
+        <label class="field-block-label">Outras entregas (uma por linha)</label>
+        <textarea class="notes-textarea" id="proposta-extra" placeholder="Entregas adicionais, fora da lista acima..."></textarea>
+      </div>
+      <div class="field-block">
+        <label class="field-block-label">Forma de pagamento e valores *</label>
+        <textarea class="notes-textarea" id="proposta-payment" placeholder="Ex: R$ 5.000 de setup + R$ 2.500/mês por 6 meses..."></textarea>
+      </div>
+      <div class="field-block">
+        <label class="field-block-label">Transcrição da reunião (opcional)</label>
+        <textarea class="notes-textarea" id="proposta-transcription" placeholder="Cole aqui a transcrição da reunião, se tiver."></textarea>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-btn modal-btn-danger" id="proposta-delete" style="display:none"><svg><use href="#i-trash"/></svg>Excluir</button>
+      <button class="modal-btn" id="proposta-cancel">Cancelar</button>
+      <button class="modal-btn modal-btn-primary" id="proposta-save"><svg><use href="#i-check"/></svg>Salvar proposta</button>
     </div>
   </div>
 </div>
