@@ -147,6 +147,73 @@
     return calcTemperature(lead.faturamento, lead.nota_geral);
   }
 
+  // ─── Lead Scoring (0–100) ───
+  // Pontua o lead por capacidade de investir, momento do diagnóstico,
+  // origem e disponibilidade de contato. Transparente: mostra o detalhe.
+  function leadScoreParts(lead) {
+    const fatMap = {
+      'Até R$ 5 mil/mês': 12,
+      'R$ 5 a R$ 15 mil/mês': 35,
+      'R$ 15 a R$ 30 mil/mês': 40,
+      'R$ 30 a R$ 50 mil/mês': 32,
+      'Acima de R$ 50 mil/mês': 26
+    };
+    const fatPts = fatMap[lead.faturamento] || 12;
+    const n = lead.nota_geral;
+    const momPts = n == null ? 18 : n < 1.5 ? 22 : n < 3.5 ? 35 : n < 4.5 ? 18 : 8;
+    const srcMap = {
+      trafego_pago: 15, bio_link: 11, direct: 11, stories: 10,
+      instagram_organico: 9, facebook_organico: 9, direto: 6, outro: 5
+    };
+    const srcPts = srcMap[lead.source_type] || 6;
+    const contatoPts = phoneDigits(lead.telefone) ? 10 : 0;
+    return {
+      parts: [
+        { label: 'Capacidade de investir', pts: fatPts, max: 40 },
+        { label: 'Momento do diagnóstico', pts: momPts, max: 35 },
+        { label: 'Origem do lead', pts: srcPts, max: 15 },
+        { label: 'Contato disponível', pts: contatoPts, max: 10 }
+      ],
+      total: Math.min(100, fatPts + momPts + srcPts + contatoPts)
+    };
+  }
+  function leadScore(lead) { return leadScoreParts(lead).total; }
+  function scoreInfo(lead) {
+    const score = leadScore(lead);
+    if (score >= 80) return { score, label: 'Prioridade', color: '#16A34A' };
+    if (score >= 65) return { score, label: 'Quente', color: '#65A30D' };
+    if (score >= 45) return { score, label: 'Morno', color: '#D97706' };
+    return { score, label: 'Frio', color: '#DC2626' };
+  }
+  // Selo compacto (card / lista)
+  function scoreBadge(lead) {
+    const inf = scoreInfo(lead);
+    return `<div class="score-badge" style="--sc:${inf.color}" title="Lead score: ${inf.score}/100">
+      <span class="score-badge-num">${inf.score}</span>
+      <span class="score-badge-lb">${inf.label}</span>
+    </div>`;
+  }
+  // Medidor completo com detalhamento (modal / relatório)
+  function scoreGauge(lead) {
+    const { parts, total } = leadScoreParts(lead);
+    const inf = scoreInfo(lead);
+    return `<div class="score-gauge">
+      <div class="score-ring" style="--sc:${inf.color};--pct:${total}">
+        <div class="score-ring-in">
+          <span class="score-ring-num">${total}</span>
+          <span class="score-ring-lb">${inf.label}</span>
+        </div>
+      </div>
+      <div class="score-bars">
+        ${parts.map(p => `<div class="score-bar-row">
+          <span class="score-bar-lb">${p.label}</span>
+          <span class="score-bar-track"><span style="width:${Math.round(p.pts / p.max * 100)}%;background:${inf.color}"></span></span>
+          <span class="score-bar-val">${p.pts}<i>/${p.max}</i></span>
+        </div>`).join('')}
+      </div>
+    </div>`;
+  }
+
   // ─── Permissões ───
   function defaultPerms(role) {
     if (role === 'admin') {
@@ -248,15 +315,14 @@
   // Resumo interpretativo do lead, gerado a partir dos dados do diagnóstico.
   function buildLeadSummary(lead) {
     const nome = firstName(lead.nome) || 'Este lead';
-    const temp = leadTemperature(lead);
-    const tempTxt = {
-      5: 'um lead IDEAL — prioridade máxima de contato',
-      4: 'um lead muito quente — priorize a abordagem',
-      3: 'um lead quente, com bom potencial',
-      2: 'um lead morno — precisa de mais nutrição antes de avançar',
-      1: 'um lead frio — baixa prioridade neste momento'
-    }[temp] || 'um lead a ser avaliado';
-    const parts = [`${nome} é ${tempTxt}.`];
+    const inf = scoreInfo(lead);
+    const scoreTxt = {
+      'Prioridade': 'lead de PRIORIDADE — contato imediato',
+      'Quente': 'um lead quente — priorize a abordagem',
+      'Morno': 'um lead morno — precisa de mais nutrição antes de avançar',
+      'Frio': 'um lead frio — baixa prioridade neste momento'
+    }[inf.label] || 'um lead a ser avaliado';
+    const parts = [`${nome} tem lead score ${inf.score}/100 — ${scoreTxt}.`];
     if (lead.faturamento) {
       const low = /Até R\$ 5/.test(lead.faturamento);
       const high = /Acima/.test(lead.faturamento);
@@ -754,7 +820,6 @@
     const handle = lead.instagram || '';
     const fname = firstName(lead.nome);
     const avatar = avatarUrl(handle, lead.nome);
-    const temp = leadTemperature(lead);
     const assignedP = lead.assigned_to ? profileById(lead.assigned_to) : null;
     const assignedChip = assignedP
       ? `<span class="chip chip-accent" title="Vendedor: ${escapeHtml(profileName(assignedP))}">👤 ${escapeHtml(firstName(assignedP.nome) || profileName(assignedP))}</span>`
@@ -789,8 +854,8 @@
             ${sourceChip}
           </div>
           <div class="card-bottom-col card-bottom-right">
-            <div class="card-bottom-lb">${tempLabel(temp)}</div>
-            ${cardDots(temp)}
+            <div class="card-bottom-lb">Lead score</div>
+            ${scoreBadge(lead)}
           </div>
         </div>
         <div class="card-footer">
@@ -933,7 +998,7 @@
     }).length;
     const sold = state.leads.filter(l => l.pipeline_status === 'vendida').length;
     const conv = total > 0 ? Math.round((sold / total) * 100) : 0;
-    const hot = state.leads.filter(l => leadTemperature(l) >= 4).length;
+    const hot = state.leads.filter(l => leadScore(l) >= 65).length;
     const unassigned = state.leads.filter(l => !l.assigned_to).length;
 
     $('m-total').textContent = total;
@@ -1275,7 +1340,7 @@
       <div class="mini-lead-row" data-lead-id="${l.id}">
         <div class="mini-lead-avatar"><img src="${av}" alt="" onerror="this.parentElement.textContent='${initials(l.nome)}'"></div>
         <div class="mini-lead-info">
-          <div class="mini-lead-name">${escapeHtml(l.nome)} ${tempGauge(leadTemperature(l))}</div>
+          <div class="mini-lead-name">${escapeHtml(l.nome)} ${scoreBadge(l)}</div>
           <div class="mini-lead-meta">${escapeHtml(l.instagram || '')} · ${escapeHtml(l.faturamento || '—')}${l.source_campaign ? ' · ' + escapeHtml(l.source_campaign) : ''}</div>
         </div>
         <span class="mini-lead-status" style="background:${stage.color}33;color:#1A1A18">${escapeHtml(stage.label)}</span>
@@ -3160,9 +3225,9 @@
       }
     }
 
-    // Temperatura do lead
+    // Lead Score
     const tempEl = $('modal-temp');
-    if (tempEl) tempEl.innerHTML = tempMeter(leadTemperature(lead));
+    if (tempEl) tempEl.innerHTML = scoreGauge(lead);
 
     // Avatar
     const av = $('modal-avatar-img');
@@ -3258,8 +3323,8 @@
           <div class="report-stat"><span>Nota geral</span><strong>${nota} / 5</strong></div>
         </div>
         <div class="report-section">
-          <h4>Temperatura do lead</h4>
-          ${tempMeter(leadTemperature(lead))}
+          <h4>Lead Score</h4>
+          ${scoreGauge(lead)}
         </div>
         <div class="report-section">
           <h4>Leitura do lead</h4>
