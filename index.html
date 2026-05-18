@@ -586,8 +586,17 @@
 
     <!-- ═══════════ VIEW: AUTOMAÇÕES ═══════════ -->
     <section class="view" data-view="automacoes">
-      <div class="settings">
-        <div class="settings-body">
+      <div class="auto">
+        <aside class="auto-list">
+          <div class="auto-list-head">
+            <span class="auto-list-title">Automações</span>
+            <button class="btn-primary" id="btn-new-automation">
+              <svg><use href="#i-plus"/></svg> Nova
+            </button>
+          </div>
+          <div class="auto-list-items" id="auto-list-items"></div>
+        </aside>
+        <div class="auto-config">
 
           <!-- Lembretes de reunião (admin) -->
           <div class="settings-section" id="auto-reminders">
@@ -634,6 +643,9 @@
             </div>
             <div class="schedmsg-list" id="schedmsg-list"></div>
           </div>
+
+          <!-- Builder de automação personalizada (renderizado via JS) -->
+          <div class="settings-section" id="autopanel-builder" style="display:none"></div>
 
         </div>
       </div>
@@ -789,6 +801,10 @@
             <span class="wa-status-dot" id="wa-status-dot"></span>
             <span id="wa-status-text">Verificando status...</span>
           </div>
+          <a class="modal-btn" href="https://developers.facebook.com/apps/" target="_blank"
+             style="margin-top:12px;display:inline-flex;width:auto">
+            <svg><use href="#i-wa"/></svg> Abrir Meta for Developers
+          </a>
 
           <div class="field-block" style="margin-top:14px">
             <label class="perm-check" style="display:inline-flex;width:auto">
@@ -851,6 +867,10 @@
             <span class="wa-status-dot" id="google-status-dot"></span>
             <span id="google-status-text">Verificando status...</span>
           </div>
+          <a class="modal-btn" href="https://console.cloud.google.com/apis/credentials" target="_blank"
+             style="margin-top:12px;display:inline-flex;width:auto">
+            <svg><use href="#i-calendar"/></svg> Abrir Google Cloud Console
+          </a>
 
           <div class="field-block" style="margin-top:14px">
             <label class="perm-check" style="display:inline-flex;width:auto">

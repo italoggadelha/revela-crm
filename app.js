@@ -57,6 +57,9 @@
     googleStatus: { connected: false, email: null },
     // Automações
     scheduledMessages: [],
+    automations: [],
+    editingAutomation: null,
+    autoSelected: 'reminders',
     // Chat
     conversations: [],
     messages: {},                 // { conversationId: [msgs] }
@@ -356,7 +359,7 @@
     applyNavPermissions();
 
     // Load tudo
-    Promise.all([loadPipeline(), loadProfiles(), loadLeads(), loadConversations(), loadTasks(), loadAppointments(), loadScheduledMessages(), loadNotifications()]).then(() => {
+    Promise.all([loadPipeline(), loadProfiles(), loadLeads(), loadConversations(), loadTasks(), loadAppointments(), loadScheduledMessages(), loadNotifications(), loadAutomations()]).then(() => {
       renderAll();
       renderNotifications();
       subscribeRealtime();
@@ -531,6 +534,10 @@
       .on('postgres_changes', { event: '*', schema: 'public', table: 'scheduled_messages' }, async () => {
         await loadScheduledMessages();
         if (state.currentView === 'automacoes') renderSchedMsgList();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'automations' }, async () => {
+        await loadAutomations();
+        if (state.currentView === 'automacoes') renderAutoList();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, async (payload) => {
         await loadNotifications();
@@ -1957,11 +1964,204 @@
     }).join('');
   }
 
+  async function loadAutomations() {
+    const { data } = await supabase.from('automations')
+      .select('*').order('created_at', { ascending: true });
+    state.automations = data || [];
+  }
+
   function renderAutomacoes() {
-    const adminUser = isAdmin();
-    $('auto-reminders').style.display = adminUser ? '' : 'none';
-    if (adminUser) loadAutomationSettings();
-    renderSchedMsgList();
+    if (!state.autoSelected) state.autoSelected = 'reminders';
+    renderAutoList();
+    showAutoPanel(state.autoSelected);
+  }
+
+  function renderAutoList() {
+    const el = $('auto-list-items');
+    if (!el) return;
+    let html = `
+      <button class="auto-item ${state.autoSelected === 'reminders' ? 'active' : ''}" data-auto="reminders">
+        <span class="auto-item-ic">🔔</span><span>Lembretes de reunião</span></button>
+      <button class="auto-item ${state.autoSelected === 'scheduled' ? 'active' : ''}" data-auto="scheduled">
+        <span class="auto-item-ic">📨</span><span>Mensagens agendadas</span></button>
+      <div class="auto-list-sep">Personalizadas</div>`;
+    if (!state.automations.length) {
+      html += `<div class="auto-list-empty">Nenhuma automação criada.</div>`;
+    } else {
+      html += state.automations.map(a => `
+        <button class="auto-item ${state.autoSelected === a.id ? 'active' : ''}" data-auto="${a.id}">
+          <span class="auto-item-ic">${a.active ? '⚡' : '○'}</span>
+          <span>${escapeHtml(a.name)}</span></button>`).join('');
+    }
+    el.innerHTML = html;
+    el.querySelectorAll('.auto-item').forEach(b => {
+      b.addEventListener('click', () => showAutoPanel(b.dataset.auto));
+    });
+  }
+
+  function showAutoPanel(sel) {
+    state.autoSelected = sel;
+    $$('#auto-list-items .auto-item').forEach(b =>
+      b.classList.toggle('active', b.dataset.auto === String(sel)));
+    const isBuiltin = sel === 'reminders' || sel === 'scheduled';
+    $('auto-reminders').style.display = sel === 'reminders' ? '' : 'none';
+    $('auto-scheduled').style.display = sel === 'scheduled' ? '' : 'none';
+    $('autopanel-builder').style.display = isBuiltin ? 'none' : '';
+    if (sel === 'reminders') loadAutomationSettings();
+    else if (sel === 'scheduled') renderSchedMsgList();
+    else renderAutomationBuilder(sel);
+  }
+
+  function renderAutoTriggerConfig(type, cfg) {
+    const el = $('auto-trigger-config');
+    if (!el) return;
+    cfg = cfg || {};
+    if (type === 'pipeline_enter') {
+      el.innerHTML = `<div class="field-block"><label class="field-block-label">Etapa do pipeline</label>
+        <select class="input-text" id="auto-tc-stage">${state.pipeline.map(s =>
+          `<option value="${s.id}">${escapeHtml(s.label)}</option>`).join('')}</select></div>`;
+      if (cfg.stage) $('auto-tc-stage').value = cfg.stage;
+    } else if (type === 'keyword_reply') {
+      el.innerHTML = `<div class="field-block"><label class="field-block-label">Palavra-chave na resposta do lead</label>
+        <input type="text" class="input-text" id="auto-tc-keyword" value="${escapeHtml(cfg.keyword || '')}" placeholder="Ex: sim, quero, agendar"></div>`;
+    } else if (type === 'schedule') {
+      el.innerHTML = `<div class="field-block"><label class="field-block-label">Horário do disparo</label>
+        <input type="time" class="input-text" id="auto-tc-time" value="${escapeHtml(cfg.time || '09:00')}"></div>`;
+    } else {
+      el.innerHTML = `<div class="field-hint">Dispara sempre que o lead enviar qualquer mensagem.</div>`;
+    }
+  }
+  function readTriggerConfig(type) {
+    if (type === 'pipeline_enter') return { stage: ($('auto-tc-stage') || {}).value || '' };
+    if (type === 'keyword_reply') return { keyword: (($('auto-tc-keyword') || {}).value || '').trim() };
+    if (type === 'schedule') return { time: ($('auto-tc-time') || {}).value || '09:00' };
+    return {};
+  }
+
+  function makeStepEl(s) {
+    const div = document.createElement('div');
+    div.className = 'autostep';
+    div.dataset.type = s.type;
+    if (s.type === 'wait') {
+      div.innerHTML = `<div class="autostep-hd"><span class="autostep-drag">⠿</span>
+        <span class="autostep-tt">⏱ Esperar</span>
+        <button class="autostep-del" type="button">✕</button></div>
+        <div class="autostep-bd"><input type="number" class="input-text autostep-min" value="${s.minutes || 60}" min="1" style="width:90px">
+        <span style="font-size:12.5px;color:var(--text-muted)">minutos</span></div>`;
+    } else {
+      div.innerHTML = `<div class="autostep-hd"><span class="autostep-drag">⠿</span>
+        <span class="autostep-tt">💬 Enviar mensagem</span>
+        <button class="autostep-del" type="button">✕</button></div>
+        <div class="autostep-bd"><textarea class="notes-textarea autostep-text" placeholder="Texto da mensagem... use {nome}">${escapeHtml(s.text || '')}</textarea></div>`;
+    }
+    div.querySelector('.autostep-del').addEventListener('click', () => div.remove());
+    return div;
+  }
+
+  function renderAutomationBuilder(id) {
+    let a;
+    const existing = state.automations.find(x => x.id === id);
+    if (id === 'new' || !existing) {
+      a = { id: 'new', name: '', trigger_type: 'pipeline_enter', trigger_config: {}, steps: [], active: false };
+    } else {
+      a = JSON.parse(JSON.stringify(existing));
+    }
+    state.editingAutomation = a;
+    const builder = $('autopanel-builder');
+    builder.innerHTML = `
+      <div class="settings-section-head">
+        <div>
+          <div class="settings-title">${a.id === 'new' ? 'Nova automação' : 'Editar automação'}</div>
+          <div class="settings-desc">Defina o gatilho e os passos. Arraste os passos pelo ⠿ para reordenar.</div>
+        </div>
+        <button class="btn-primary" id="auto-save"><svg><use href="#i-check"/></svg> Salvar</button>
+      </div>
+      <div class="field-block">
+        <label class="field-block-label">Nome da automação</label>
+        <input type="text" class="input-text" id="auto-name" placeholder="Ex: Boas-vindas ao novo lead">
+      </div>
+      <label class="perm-check" style="display:inline-flex;width:auto;margin:4px 0 10px">
+        <input type="checkbox" id="auto-active"><span>Automação ativa</span>
+      </label>
+      <div class="field-block">
+        <label class="field-block-label">Gatilho — quando a automação dispara</label>
+        <select class="input-text" id="auto-trigger">
+          <option value="pipeline_enter">Quando o lead entra numa etapa do pipeline</option>
+          <option value="message_received">Quando o lead envia uma mensagem</option>
+          <option value="keyword_reply">Quando o lead responde com uma palavra-chave</option>
+          <option value="schedule">Em um horário do dia</option>
+        </select>
+      </div>
+      <div id="auto-trigger-config"></div>
+      <div class="field-block">
+        <label class="field-block-label">Passos — o que a automação faz</label>
+        <div class="autosteps" id="autosteps"></div>
+        <div class="autostep-add">
+          <button class="autostep-addbtn" type="button" data-add="message">+ Enviar mensagem</button>
+          <button class="autostep-addbtn" type="button" data-add="wait">+ Esperar</button>
+        </div>
+      </div>
+      ${a.id !== 'new'
+        ? '<button class="modal-btn modal-btn-danger" id="auto-delete" style="margin-top:8px"><svg><use href="#i-trash"/></svg>Excluir automação</button>'
+        : ''}
+    `;
+    $('auto-name').value = a.name || '';
+    $('auto-active').checked = !!a.active;
+    $('auto-trigger').value = a.trigger_type;
+    renderAutoTriggerConfig(a.trigger_type, a.trigger_config);
+    const stepsEl = $('autosteps');
+    (a.steps || []).forEach(s => stepsEl.appendChild(makeStepEl(s)));
+    if (window.Sortable) Sortable.create(stepsEl, { handle: '.autostep-drag', animation: 150 });
+
+    $('auto-trigger').addEventListener('change', () =>
+      renderAutoTriggerConfig($('auto-trigger').value, {}));
+    $$('.autostep-addbtn').forEach(b => b.addEventListener('click', () =>
+      stepsEl.appendChild(makeStepEl({ type: b.dataset.add, text: '', minutes: 60 }))));
+    $('auto-save').addEventListener('click', saveAutomation);
+    const del = $('auto-delete');
+    if (del) del.addEventListener('click', () => deleteAutomation(a.id));
+  }
+
+  async function saveAutomation() {
+    const a = state.editingAutomation;
+    const name = $('auto-name').value.trim();
+    if (!name) { toast('Dê um nome à automação', 'error'); return; }
+    const triggerType = $('auto-trigger').value;
+    const steps = $$('#autosteps .autostep').map(el => el.dataset.type === 'wait'
+      ? { type: 'wait', minutes: Number(el.querySelector('.autostep-min').value) || 0 }
+      : { type: 'message', text: el.querySelector('.autostep-text').value });
+    const payload = {
+      name, trigger_type: triggerType, trigger_config: readTriggerConfig(triggerType),
+      steps, active: $('auto-active').checked
+    };
+    const btn = $('auto-save');
+    btn.disabled = true;
+    let error, saved;
+    if (a.id === 'new') {
+      payload.created_by = state.user.id;
+      ({ data: saved, error } = await supabase.from('automations').insert(payload).select().single());
+    } else {
+      ({ data: saved, error } = await supabase.from('automations').update(payload).eq('id', a.id).select().single());
+    }
+    btn.disabled = false;
+    if (error) { toast('Erro: ' + error.message, 'error'); return; }
+    await loadAutomations();
+    state.autoSelected = saved.id;
+    renderAutoList();
+    showAutoPanel(saved.id);
+    toast('Automação salva', 'success');
+  }
+
+  async function deleteAutomation(id) {
+    if (id === 'new') { showAutoPanel('reminders'); renderAutoList(); return; }
+    if (!confirm('Excluir esta automação?')) return;
+    const { error } = await supabase.from('automations').delete().eq('id', id);
+    if (error) { toast('Erro: ' + error.message, 'error'); return; }
+    state.automations = state.automations.filter(x => x.id !== id);
+    state.autoSelected = 'reminders';
+    renderAutoList();
+    showAutoPanel('reminders');
+    toast('Automação excluída', 'success');
   }
 
   function openSchedMsgModal(presetLeadId) {
@@ -3470,6 +3670,10 @@
     // Automações
     $('btn-save-reminders').addEventListener('click', saveReminders);
     $('btn-add-schedmsg').addEventListener('click', openSchedMsgModal);
+    $('btn-new-automation').addEventListener('click', () => {
+      showAutoPanel('new');
+      renderAutoList();
+    });
     $('schedmsg-modal-close').addEventListener('click', closeAllModals);
     $('schedmsg-cancel').addEventListener('click', closeAllModals);
     $('schedmsg-modal-backdrop').addEventListener('click', e => {
