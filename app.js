@@ -2119,17 +2119,35 @@
     const div = document.createElement('div');
     div.className = 'autostep';
     div.dataset.type = s.type;
+    let title, body, col = false;
     if (s.type === 'wait') {
-      div.innerHTML = `<div class="autostep-hd"><span class="autostep-drag">⠿</span>
-        <span class="autostep-tt">⏱ Esperar</span>
-        <button class="autostep-del" type="button">✕</button></div>
-        <div class="autostep-bd"><input type="number" class="input-text autostep-min" value="${s.minutes || 60}" min="1" style="width:90px">
-        <span style="font-size:12.5px;color:var(--text-muted)">minutos</span></div>`;
+      title = '⏱ Esperar';
+      body = `<input type="number" class="input-text autostep-min" value="${s.minutes || 60}" min="1" style="width:90px">
+        <span style="font-size:12.5px;color:var(--text-muted)">minutos</span>`;
+    } else if (s.type === 'tag') {
+      title = '🏷️ Adicionar tag ao lead';
+      body = `<input type="text" class="input-text autostep-tag" value="${escapeHtml(s.tag || '')}" placeholder="Nome da tag (ex: interessado)">`;
+    } else if (s.type === 'pipeline') {
+      title = '📊 Mover no pipeline';
+      body = `<select class="input-text autostep-stage">${state.pipeline.map(st =>
+        `<option value="${st.id}">${escapeHtml(st.label)}</option>`).join('')}</select>`;
+    } else if (s.type === 'webhook') {
+      title = '🔗 Enviar webhook';
+      body = `<input type="text" class="input-text autostep-url" value="${escapeHtml(s.url || '')}" placeholder="https://... (POST com os dados do lead)">`;
     } else {
-      div.innerHTML = `<div class="autostep-hd"><span class="autostep-drag">⠿</span>
-        <span class="autostep-tt">💬 Enviar mensagem</span>
-        <button class="autostep-del" type="button">✕</button></div>
-        <div class="autostep-bd"><textarea class="notes-textarea autostep-text" placeholder="Texto da mensagem... use {nome}">${escapeHtml(s.text || '')}</textarea></div>`;
+      title = '💬 Enviar mensagem';
+      col = true;
+      body = `<textarea class="notes-textarea autostep-text" placeholder="Texto da mensagem... use {nome}">${escapeHtml(s.text || '')}</textarea>
+        <input type="text" class="input-text autostep-tpl" value="${escapeHtml(s.template || '')}" placeholder="Template aprovado (usado fora da janela de 24h)" style="margin-top:7px">
+        <div class="autostep-hint">Dentro da janela de 24h vai o texto livre. Fora dela, o WhatsApp exige um <strong>template aprovado</strong> — informe o nome dele acima.</div>`;
+    }
+    div.innerHTML = `<div class="autostep-hd"><span class="autostep-drag">⠿</span>
+      <span class="autostep-tt">${title}</span>
+      <button class="autostep-del" type="button">✕</button></div>
+      <div class="autostep-bd${col ? ' autostep-bd-col' : ''}">${body}</div>`;
+    if (s.type === 'pipeline' && s.stage) {
+      const sel = div.querySelector('.autostep-stage');
+      if (sel) sel.value = s.stage;
     }
     div.querySelector('.autostep-del').addEventListener('click', () => div.remove());
     return div;
@@ -2171,11 +2189,14 @@
       </div>
       <div id="auto-trigger-config"></div>
       <div class="field-block">
-        <label class="field-block-label">Passos — o que a automação faz</label>
+        <label class="field-block-label">Blocos — o que o bot faz (arraste pelo ⠿ para reordenar)</label>
         <div class="autosteps" id="autosteps"></div>
         <div class="autostep-add">
-          <button class="autostep-addbtn" type="button" data-add="message">+ Enviar mensagem</button>
-          <button class="autostep-addbtn" type="button" data-add="wait">+ Esperar</button>
+          <button class="autostep-addbtn" type="button" data-add="message">💬 Mensagem</button>
+          <button class="autostep-addbtn" type="button" data-add="wait">⏱ Esperar</button>
+          <button class="autostep-addbtn" type="button" data-add="tag">🏷️ Tag</button>
+          <button class="autostep-addbtn" type="button" data-add="pipeline">📊 Pipeline</button>
+          <button class="autostep-addbtn" type="button" data-add="webhook">🔗 Webhook</button>
         </div>
       </div>
       ${a.id !== 'new'
@@ -2204,9 +2225,18 @@
     const name = $('auto-name').value.trim();
     if (!name) { toast('Dê um nome à automação', 'error'); return; }
     const triggerType = $('auto-trigger').value;
-    const steps = $$('#autosteps .autostep').map(el => el.dataset.type === 'wait'
-      ? { type: 'wait', minutes: Number(el.querySelector('.autostep-min').value) || 0 }
-      : { type: 'message', text: el.querySelector('.autostep-text').value });
+    const steps = $$('#autosteps .autostep').map(el => {
+      const t = el.dataset.type;
+      if (t === 'wait') return { type: 'wait', minutes: Number(el.querySelector('.autostep-min').value) || 0 };
+      if (t === 'tag') return { type: 'tag', tag: el.querySelector('.autostep-tag').value.trim() };
+      if (t === 'pipeline') return { type: 'pipeline', stage: el.querySelector('.autostep-stage').value };
+      if (t === 'webhook') return { type: 'webhook', url: el.querySelector('.autostep-url').value.trim() };
+      return {
+        type: 'message',
+        text: el.querySelector('.autostep-text').value,
+        template: el.querySelector('.autostep-tpl').value.trim()
+      };
+    });
     const payload = {
       name, trigger_type: triggerType, trigger_config: readTriggerConfig(triggerType),
       steps, active: $('auto-active').checked

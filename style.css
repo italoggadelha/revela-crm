@@ -3694,3 +3694,9 @@ a { color: inherit; text-decoration: none; }
   width: 34px; text-align: right; flex-shrink: 0;
 }
 @media (max-width: 600px) { .report-qgrid { grid-template-columns: 1fr; } }
+
+/* ── Onda E: blocos do construtor de bot ── */
+.autostep-bd-col { flex-direction: column; align-items: stretch; }
+.autostep-hint { font-size: 11px; color: var(--text-faded); margin-top: 6px; line-height: 1.5; }
+.autostep-bd .input-text, .autostep-bd .notes-textarea { width: 100%; }
+.autostep-bd .autostep-min { width: 90px !important; }
