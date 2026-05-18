@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agendar conversa · REVELA</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  :root{ --accent:#0F766E; --accent2:#14B8A6; --bg:#FAFAF7; --surface:#fff;
+    --border:#E8E6E1; --text:#1A1A18; --muted:#6B6B68; --faded:#9CA3AF; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',sans-serif;background:linear-gradient(160deg,#F0FDFA,#FAFAF7 60%,#FFF8FB);
+    color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+  .bk-card{background:var(--surface);border:1px solid var(--border);border-radius:18px;
+    width:100%;max-width:480px;box-shadow:0 20px 50px rgba(26,26,24,.12);overflow:hidden}
+  .bk-hero{background:linear-gradient(120deg,#0F766E,#0D9488 55%,#14B8A6);color:#fff;padding:26px 26px 22px}
+  .bk-brand{font-family:'Poppins','Inter',sans-serif;font-weight:800;letter-spacing:.04em;font-size:13px;opacity:.85}
+  .bk-hero h1{font-family:'Lora',serif;font-size:23px;margin-top:6px;font-weight:700}
+  .bk-hero p{font-size:13px;opacity:.9;margin-top:4px}
+  .bk-body{padding:22px 26px 26px}
+  .bk-step-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--faded);margin:18px 0 8px}
+  .bk-step-label:first-child{margin-top:0}
+  .bk-dates{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px}
+  .bk-date{flex-shrink:0;border:1px solid var(--border);background:var(--surface);border-radius:12px;
+    padding:9px 6px;width:62px;text-align:center;cursor:pointer;transition:.15s}
+  .bk-date:hover{border-color:var(--accent)}
+  .bk-date.sel{background:var(--accent);border-color:var(--accent);color:#fff}
+  .bk-date .dw{font-size:10px;font-weight:700;text-transform:uppercase}
+  .bk-date .dd{font-size:19px;font-weight:700;line-height:1.2}
+  .bk-date .dm{font-size:10px;opacity:.7}
+  .bk-slots{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .bk-slot{border:1px solid var(--border);background:var(--surface);border-radius:9px;
+    padding:9px 4px;font-size:13px;font-weight:600;cursor:pointer;transition:.15s;color:var(--text)}
+  .bk-slot:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+  .bk-slot.sel{background:var(--accent);border-color:var(--accent);color:#fff}
+  .bk-slot:disabled{opacity:.35;cursor:not-allowed;text-decoration:line-through}
+  .bk-field{margin-top:10px}
+  .bk-field label{font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px}
+  .bk-field input{width:100%;border:1px solid var(--border);border-radius:9px;padding:10px 12px;
+    font-size:14px;font-family:inherit;color:var(--text)}
+  .bk-field input:focus{outline:none;border-color:var(--accent)}
+  .bk-btn{width:100%;margin-top:20px;background:linear-gradient(135deg,#0D9488,#0F766E);color:#fff;
+    border:none;border-radius:11px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;
+    font-family:inherit;transition:.15s}
+  .bk-btn:hover{filter:brightness(1.08)}
+  .bk-btn:disabled{opacity:.5;cursor:not-allowed}
+  .bk-msg{font-size:13px;margin-top:12px;text-align:center}
+  .bk-msg.err{color:#DC2626}
+  .bk-loading,.bk-done{padding:50px 30px;text-align:center;color:var(--muted)}
+  .bk-done .ico{font-size:46px}
+  .bk-done h2{font-family:'Lora',serif;font-size:22px;color:var(--text);margin:12px 0 6px}
+  .bk-done p{font-size:14px}
+  .bk-foot{text-align:center;font-size:11px;color:var(--faded);padding:14px}
+</style>
+</head>
+<body>
+<div class="bk-card">
+  <div id="bk-root"><div class="bk-loading">Carregando…</div></div>
+  <div class="bk-foot">REVELA · CRM</div>
+</div>
+
+<script src="./config.js"></script>
+<script>
+(function(){
+  'use strict';
+  var FN = (window.CRM_CONFIG && window.CRM_CONFIG.SUPABASE_URL || '') + '/functions/v1/book-appointment';
+  var qs = new URLSearchParams(location.search);
+  var V = qs.get('v'), LEAD = qs.get('lead');
+  var root = document.getElementById('bk-root');
+  var WD = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  var MO = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  var SLOTS = ['09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00'];
+  var state = { vendedor:'', busy:[], date:null, time:null, name:'', phone:'' };
+
+  function pad(n){ return String(n).padStart(2,'0'); }
+  function ymd(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+
+  function api(payload){
+    return fetch(FN,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(Object.assign({v:V,lead:LEAD},payload))}).then(function(r){return r.json();});
+  }
+
+  if(!V){ root.innerHTML = '<div class="bk-loading">Link de agendamento inválido.</div>'; return; }
+
+  api({action:'info'}).then(function(r){
+    if(r.error){ root.innerHTML = '<div class="bk-loading">'+r.error+'</div>'; return; }
+    state.vendedor = r.vendedor || 'nossa equipe';
+    state.busy = r.busy || [];
+    if(r.lead){ state.name = r.lead.nome||''; state.phone = r.lead.telefone||''; }
+    render();
+  }).catch(function(){ root.innerHTML='<div class="bk-loading">Não foi possível carregar. Tente de novo.</div>'; });
+
+  function nextDays(n){
+    var out=[], t=new Date(); t.setHours(0,0,0,0);
+    for(var i=0;i<n;i++){ var d=new Date(t); d.setDate(t.getDate()+i); out.push(d); }
+    return out;
+  }
+  function slotBusy(dateStr,time){
+    var start=new Date(dateStr+'T'+time+':00');
+    if(start.getTime()<Date.now()) return true;
+    var end=start.getTime()+3600000;
+    return state.busy.some(function(b){
+      var bs=new Date(b).getTime(); return bs>=start.getTime() && bs<end;
+    });
+  }
+
+  function render(){
+    var days = nextDays(21);
+    if(!state.date) state.date = ymd(days[0]);
+    var html = ''+
+      '<div class="bk-hero"><div class="bk-brand">REVELA</div>'+
+      '<h1>Agende sua conversa</h1>'+
+      '<p>com '+esc(state.vendedor)+' — escolha o melhor dia e horário</p></div>'+
+      '<div class="bk-body">'+
+        '<div class="bk-step-label">1 · Escolha o dia</div>'+
+        '<div class="bk-dates">'+ days.map(function(d){
+          var k=ymd(d);
+          return '<div class="bk-date'+(k===state.date?' sel':'')+'" data-date="'+k+'">'+
+            '<div class="dw">'+WD[d.getDay()]+'</div><div class="dd">'+d.getDate()+'</div>'+
+            '<div class="dm">'+MO[d.getMonth()]+'</div></div>';
+        }).join('')+'</div>'+
+        '<div class="bk-step-label">2 · Escolha o horário</div>'+
+        '<div class="bk-slots">'+ SLOTS.map(function(t){
+          var bz=slotBusy(state.date,t);
+          return '<button class="bk-slot'+(t===state.time?' sel':'')+'" data-time="'+t+'"'+(bz?' disabled':'')+'>'+t+'</button>';
+        }).join('')+'</div>'+
+        '<div class="bk-step-label">3 · Seus dados</div>'+
+        '<div class="bk-field"><label>Nome</label><input id="bk-name" value="'+esc(state.name)+'" placeholder="Seu nome"></div>'+
+        '<div class="bk-field"><label>WhatsApp</label><input id="bk-phone" value="'+esc(state.phone)+'" placeholder="(00) 00000-0000"></div>'+
+        '<button class="bk-btn" id="bk-confirm">Confirmar agendamento</button>'+
+        '<div class="bk-msg" id="bk-msg"></div>'+
+      '</div>';
+    root.innerHTML = html;
+
+    root.querySelectorAll('[data-date]').forEach(function(el){
+      el.onclick=function(){ state.date=el.dataset.date; state.time=null; render(); };
+    });
+    root.querySelectorAll('[data-time]').forEach(function(el){
+      el.onclick=function(){ if(el.disabled) return; state.time=el.dataset.time; render(); };
+    });
+    document.getElementById('bk-name').oninput=function(e){ state.name=e.target.value; };
+    document.getElementById('bk-phone').oninput=function(e){ state.phone=e.target.value; };
+    document.getElementById('bk-confirm').onclick=confirm;
+  }
+
+  function confirm(){
+    var msg=document.getElementById('bk-msg');
+    if(!state.time){ msg.className='bk-msg err'; msg.textContent='Escolha um horário.'; return; }
+    if(!state.name.trim()){ msg.className='bk-msg err'; msg.textContent='Informe seu nome.'; return; }
+    var btn=document.getElementById('bk-confirm');
+    btn.disabled=true; btn.textContent='Agendando…';
+    var start=new Date(state.date+'T'+state.time+':00');
+    var end=new Date(start.getTime()+3600000);
+    api({action:'book',starts_at:start.toISOString(),ends_at:end.toISOString(),
+      name:state.name.trim(),phone:state.phone.trim()}).then(function(r){
+      if(r.ok){
+        root.innerHTML='<div class="bk-done"><div class="ico">✅</div>'+
+          '<h2>Agendamento confirmado!</h2>'+
+          '<p>'+esc(state.name.split(' ')[0])+', sua conversa está marcada para<br><strong>'+
+          fmt(start)+'</strong>.<br>Você receberá um lembrete. Até lá! 👋</p></div>';
+      } else {
+        btn.disabled=false; btn.textContent='Confirmar agendamento';
+        msg.className='bk-msg err'; msg.textContent=r.error||'Não foi possível agendar.';
+      }
+    }).catch(function(){
+      btn.disabled=false; btn.textContent='Confirmar agendamento';
+      msg.className='bk-msg err'; msg.textContent='Erro de conexão. Tente de novo.';
+    });
+  }
+
+  function fmt(d){
+    return WD[d.getDay()]+', '+d.getDate()+' de '+
+      ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'][d.getMonth()]+
+      ' às '+pad(d.getHours())+':'+pad(d.getMinutes());
+  }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+})();
+</script>
+</body>
+</html>

@@ -490,10 +490,15 @@
       <div class="agenda">
         <header class="agenda-head">
           <div class="agenda-nav">
-            <button class="agenda-navbtn" id="agenda-prev" title="Mês anterior">‹</button>
+            <button class="agenda-navbtn" id="agenda-prev" title="Anterior">‹</button>
             <span class="agenda-month" id="agenda-month-label">—</span>
-            <button class="agenda-navbtn" id="agenda-next" title="Próximo mês">›</button>
+            <button class="agenda-navbtn" id="agenda-next" title="Próximo">›</button>
             <button class="btn-ghost" id="agenda-today">Hoje</button>
+            <div class="agenda-views" id="agenda-views">
+              <button class="agenda-view-btn active" data-aview="month">Mês</button>
+              <button class="agenda-view-btn" data-aview="week">Semana</button>
+              <button class="agenda-view-btn" data-aview="day">Dia</button>
+            </div>
           </div>
           <div class="agenda-actions">
             <button class="btn-primary" id="btn-add-appt">
@@ -892,6 +897,9 @@
       <button class="modal-btn modal-btn-primary" id="modal-chat" type="button">
         <svg><use href="#i-chat"/></svg>Abrir chat interno
       </button>
+      <button class="modal-btn" id="modal-schedule" type="button">
+        <svg><use href="#i-calendar"/></svg>Agendar reunião
+      </button>
       <a class="modal-btn" id="modal-wa" target="_blank">
         <svg><use href="#i-wa"/></svg>WhatsApp
       </a>
@@ -1115,6 +1123,35 @@
       <button class="modal-btn modal-btn-danger" id="appt-delete" style="display:none"><svg><use href="#i-trash"/></svg>Excluir</button>
       <button class="modal-btn" id="appt-cancel">Cancelar</button>
       <button class="modal-btn modal-btn-primary" id="appt-save"><svg><use href="#i-check"/></svg>Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- MODAL: Link de agendamento                                      -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="booklink-modal-backdrop">
+  <div class="modal">
+    <header class="modal-head">
+      <div class="modal-identity">
+        <h2 class="modal-name">Link de agendamento</h2>
+        <p class="modal-handle">Envie este link para o lead marcar a reunião</p>
+      </div>
+      <button class="modal-close" id="booklink-close"><svg><use href="#i-x"/></svg></button>
+    </header>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text-muted);line-height:1.6">
+        O lead abre o link, escolhe o melhor dia e horário, e a reunião entra
+        automaticamente na sua Agenda — e o lead vai para "reunião agendada" no pipeline.
+      </p>
+      <div class="booklink-row">
+        <input type="text" class="input-text" id="booklink-url" readonly>
+        <button class="btn-primary" id="booklink-copy">Copiar</button>
+      </div>
+      <a class="modal-btn" id="booklink-open" target="_blank"
+         style="margin-top:12px;display:inline-flex;width:auto">
+        <svg><use href="#i-report"/></svg> Abrir a página de agendamento
+      </a>
     </div>
   </div>
 </div>

@@ -51,6 +51,7 @@
     editingAppointment: null,
     agendaMonth: null,
     agendaSelectedDay: null,
+    agendaView: 'month',
     googleStatus: { connected: false, email: null },
     // Automações
     scheduledMessages: [],
@@ -1663,8 +1664,37 @@
   }
 
   // ─── Render ───
+  // Os 7 dias (domingo→sábado) da semana que contém a data iso
+  function weekDays(iso) {
+    const d = new Date(iso + 'T00:00:00');
+    const start = new Date(d);
+    start.setDate(d.getDate() - d.getDay());
+    return Array.from({ length: 7 }, (_, i) => {
+      const x = new Date(start); x.setDate(start.getDate() + i); return x;
+    });
+  }
+
+  // Avança/recua a agenda conforme a visão atual (mês/semana/dia)
+  function agendaShift(dir) {
+    if (state.agendaView === 'month') {
+      const m = state.agendaMonth;
+      state.agendaMonth = new Date(m.getFullYear(), m.getMonth() + dir, 1);
+    } else {
+      const step = state.agendaView === 'week' ? 7 : 1;
+      const d = new Date(state.agendaSelectedDay + 'T00:00:00');
+      d.setDate(d.getDate() + dir * step);
+      state.agendaSelectedDay = ymd(d);
+      state.agendaMonth = new Date(d.getFullYear(), d.getMonth(), 1);
+    }
+    renderAgenda();
+  }
+
   function renderAgenda() {
     ensureAgendaState();
+    const wrap = document.querySelector('.agenda');
+    if (wrap) wrap.setAttribute('data-aview', state.agendaView);
+    $$('#agenda-views .agenda-view-btn').forEach(b =>
+      b.classList.toggle('active', b.dataset.aview === state.agendaView));
     renderAgendaHeader();
     renderAgendaGrid();
     renderAgendaDay();
@@ -1672,41 +1702,59 @@
 
   function renderAgendaHeader() {
     ensureAgendaState();
-    const m = state.agendaMonth;
     const label = $('agenda-month-label');
-    if (label) label.textContent = AG_MONTHS[m.getMonth()] + ' ' + m.getFullYear();
-    // A conexão Google fica em Configurações → Google (não mais na Agenda).
+    if (!label) return;
+    if (state.agendaView === 'day') {
+      const d = new Date(state.agendaSelectedDay + 'T00:00:00');
+      label.textContent = d.toLocaleDateString('pt-BR',
+        { weekday: 'long', day: '2-digit', month: 'long' });
+    } else if (state.agendaView === 'week') {
+      const days = weekDays(state.agendaSelectedDay);
+      const a = days[0], b = days[6];
+      label.textContent = `${a.getDate()} ${AG_MONTHS[a.getMonth()].slice(0, 3)} – ${b.getDate()} ${AG_MONTHS[b.getMonth()].slice(0, 3)}`;
+    } else {
+      const m = state.agendaMonth;
+      label.textContent = AG_MONTHS[m.getMonth()] + ' ' + m.getFullYear();
+    }
   }
 
   function renderAgendaGrid() {
     const grid = $('agenda-grid');
     if (!grid) return;
-    const m = state.agendaMonth;
-    const first = new Date(m.getFullYear(), m.getMonth(), 1);
-    const gridStart = new Date(first);
-    gridStart.setDate(1 - first.getDay());  // recua até o domingo
-    const todayStr = ymd(new Date());
+    if (state.agendaView === 'day') { grid.innerHTML = ''; return; }
 
-    // Agrupa compromissos por dia
+    const todayStr = ymd(new Date());
     const byDay = {};
     state.appointments.forEach(a => {
       const k = ymd(new Date(a.starts_at));
       (byDay[k] = byDay[k] || []).push(a);
     });
+    const limit = state.agendaView === 'week' ? 10 : 3;
 
-    let html = AG_WEEKDAYS.map(w => `<div class="cal-wd">${w}</div>`).join('');
-    for (let i = 0; i < 42; i++) {
-      const d = new Date(gridStart);
-      d.setDate(gridStart.getDate() + i);
+    const cellHTML = (d, dim) => {
       const k = ymd(d);
-      const other = d.getMonth() !== m.getMonth();
       const appts = (byDay[k] || []).slice().sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at));
-      const chips = appts.slice(0, 3).map(a =>
+      const chips = appts.slice(0, limit).map(a =>
         `<div class="cal-chip" data-appt="${a.id}"><b>${hm(a.starts_at)}</b> ${escapeHtml(a.title)}</div>`
       ).join('');
-      const more = appts.length > 3 ? `<div class="cal-more">+${appts.length - 3} mais</div>` : '';
-      html += `<div class="cal-day${other ? ' other' : ''}${k === todayStr ? ' today' : ''}${k === state.agendaSelectedDay ? ' selected' : ''}" data-day="${k}">
+      const more = appts.length > limit ? `<div class="cal-more">+${appts.length - limit} mais</div>` : '';
+      return `<div class="cal-day${dim ? ' other' : ''}${k === todayStr ? ' today' : ''}${k === state.agendaSelectedDay ? ' selected' : ''}" data-day="${k}">
         <div class="cal-daynum">${d.getDate()}</div>${chips}${more}</div>`;
+    };
+
+    let html = AG_WEEKDAYS.map(w => `<div class="cal-wd">${w}</div>`).join('');
+    if (state.agendaView === 'week') {
+      weekDays(state.agendaSelectedDay).forEach(d => { html += cellHTML(d, false); });
+    } else {
+      const m = state.agendaMonth;
+      const first = new Date(m.getFullYear(), m.getMonth(), 1);
+      const gridStart = new Date(first);
+      gridStart.setDate(1 - first.getDay());
+      for (let i = 0; i < 42; i++) {
+        const d = new Date(gridStart);
+        d.setDate(gridStart.getDate() + i);
+        html += cellHTML(d, d.getMonth() !== m.getMonth());
+      }
     }
     grid.innerHTML = html;
   }
@@ -2788,6 +2836,16 @@
     $('modal-backdrop').classList.add('show');
   }
 
+  // ─── Link de agendamento (lead marca a própria reunião) ───
+  function openBookingLink(lead) {
+    if (!lead) return;
+    const vendedor = lead.assigned_to || state.user.id;
+    const url = location.origin + '/agendar.html?v=' + vendedor + '&lead=' + lead.id;
+    $('booklink-url').value = url;
+    $('booklink-open').href = url;
+    $('booklink-modal-backdrop').classList.add('show');
+  }
+
   // ─── Relatório do lead (dentro do CRM) ───
   function openReportModal(lead) {
     if (!lead) return;
@@ -2840,6 +2898,7 @@
   function closeAllModals() {
     $('modal-backdrop').classList.remove('show');
     $('report-modal-backdrop').classList.remove('show');
+    $('booklink-modal-backdrop').classList.remove('show');
     $('edit-modal-backdrop').classList.remove('show');
     $('vendor-modal-backdrop').classList.remove('show');
     $('source-modal-backdrop').classList.remove('show');
@@ -3080,6 +3139,21 @@
     $('modal-report').addEventListener('click', () => {
       if (state.currentLead) openReportModal(state.currentLead);
     });
+    // Link de agendamento
+    $('modal-schedule').addEventListener('click', () => {
+      if (state.currentLead) openBookingLink(state.currentLead);
+    });
+    $('booklink-close').addEventListener('click', closeAllModals);
+    $('booklink-modal-backdrop').addEventListener('click', e => {
+      if (e.target === $('booklink-modal-backdrop')) closeAllModals();
+    });
+    $('booklink-copy').addEventListener('click', () => {
+      const inp = $('booklink-url');
+      inp.select();
+      const done = () => toast('Link copiado!', 'success');
+      if (navigator.clipboard) navigator.clipboard.writeText(inp.value).then(done).catch(() => { document.execCommand('copy'); done(); });
+      else { document.execCommand('copy'); done(); }
+    });
     $('report-modal-close').addEventListener('click', closeAllModals);
     $('report-close-btn').addEventListener('click', closeAllModals);
     $('report-modal-backdrop').addEventListener('click', e => {
@@ -3147,15 +3221,13 @@
     });
 
     // Agenda
-    $('agenda-prev').addEventListener('click', () => {
-      const m = state.agendaMonth;
-      state.agendaMonth = new Date(m.getFullYear(), m.getMonth() - 1, 1);
-      renderAgenda();
-    });
-    $('agenda-next').addEventListener('click', () => {
-      const m = state.agendaMonth;
-      state.agendaMonth = new Date(m.getFullYear(), m.getMonth() + 1, 1);
-      renderAgenda();
+    $('agenda-prev').addEventListener('click', () => agendaShift(-1));
+    $('agenda-next').addEventListener('click', () => agendaShift(1));
+    $$('#agenda-views .agenda-view-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.agendaView = btn.dataset.aview;
+        renderAgenda();
+      });
     });
     $('agenda-today').addEventListener('click', () => {
       const t = new Date();

@@ -2842,6 +2842,22 @@ a { color: inherit; text-decoration: none; }
   min-width: 150px; text-align: center;
 }
 .agenda-actions { display: flex; align-items: center; gap: 10px; }
+.agenda-views {
+  display: flex; gap: 3px; margin-left: 8px;
+  background: var(--surface-2); padding: 3px; border-radius: var(--radius-md);
+}
+.agenda-view-btn {
+  border: none; background: transparent; cursor: pointer;
+  font-size: 12px; font-weight: 600; color: var(--text-muted);
+  padding: 5px 12px; border-radius: var(--radius-sm);
+  transition: all 0.15s var(--ease);
+}
+.agenda-view-btn:hover { color: var(--text); }
+.agenda-view-btn.active { background: var(--surface); color: var(--accent); box-shadow: var(--shadow-sm); }
+/* Visão semana: células mais altas. Visão dia: só o painel do dia. */
+.agenda[data-aview="week"] .cal-day { min-height: 340px; }
+.agenda[data-aview="day"] .agenda-cal { display: none; }
+.agenda[data-aview="day"] .agenda-side { width: 100%; border-left: none; }
 .agenda-gstatus {
   display: inline-flex; align-items: center; gap: 6px;
   font-size: 12px; font-weight: 600; color: var(--success);
@@ -3327,3 +3343,8 @@ a { color: inherit; text-decoration: none; }
   #report-modal-backdrop .modal-actions { display: none !important; }
   #report-modal-backdrop .modal-body { overflow: visible !important; }
 }
+
+/* Link de agendamento */
+.booklink-row { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+.booklink-row #booklink-url { flex: 1; font-size: 12.5px; color: var(--text-muted); }
+.booklink-row .btn-primary { flex-shrink: 0; }
