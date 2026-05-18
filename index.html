@@ -898,9 +898,9 @@
       <a class="modal-btn" id="modal-ig" target="_blank">
         <svg><use href="#i-ig"/></svg>Instagram
       </a>
-      <a class="modal-btn" id="modal-report" target="_blank">
+      <button class="modal-btn" id="modal-report" type="button">
         <svg><use href="#i-report"/></svg>Relatório
-      </a>
+      </button>
       <button class="modal-btn modal-btn-danger" id="modal-delete" style="display:none">
         <svg><use href="#i-trash"/></svg>Deletar
       </button>
@@ -1115,6 +1115,26 @@
       <button class="modal-btn modal-btn-danger" id="appt-delete" style="display:none"><svg><use href="#i-trash"/></svg>Excluir</button>
       <button class="modal-btn" id="appt-cancel">Cancelar</button>
       <button class="modal-btn modal-btn-primary" id="appt-save"><svg><use href="#i-check"/></svg>Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- MODAL: Relatório do diagnóstico                                 -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="report-modal-backdrop">
+  <div class="modal report-modal">
+    <header class="modal-head">
+      <div class="modal-identity">
+        <h2 class="modal-name">Relatório do diagnóstico</h2>
+        <p class="modal-handle" id="report-modal-sub">—</p>
+      </div>
+      <button class="modal-close" id="report-modal-close"><svg><use href="#i-x"/></svg></button>
+    </header>
+    <div class="modal-body" id="report-body"></div>
+    <div class="modal-actions">
+      <button class="modal-btn" id="report-close-btn">Fechar</button>
+      <button class="modal-btn modal-btn-primary" id="report-print"><svg><use href="#i-report"/></svg>Imprimir / PDF</button>
     </div>
   </div>
 </div>

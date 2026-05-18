@@ -3249,3 +3249,81 @@ a { color: inherit; text-decoration: none; }
   .playbook-hero-title { font-size: 20px; }
   .playbook-doc { padding: 18px; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   RELATÓRIO DO LEAD (dentro do CRM)
+   ═══════════════════════════════════════════════════════════════════ */
+.report-doc { display: flex; flex-direction: column; gap: 18px; }
+.report-hd {
+  display: flex; align-items: center; gap: 16px;
+  padding: 18px 20px;
+  background: linear-gradient(120deg, #0F766E 0%, #0D9488 60%, #14B8A6 100%);
+  color: #fff;
+  border-radius: var(--radius-lg);
+}
+.report-avatar img {
+  width: 60px; height: 60px; border-radius: 50%;
+  border: 3px solid rgba(255,255,255,0.5);
+}
+.report-hd-info h3 {
+  font-family: 'Lora', Georgia, serif; font-size: 21px; font-weight: 700;
+}
+.report-hd-meta { font-size: 12.5px; opacity: 0.9; margin-top: 2px; }
+.report-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.report-stat {
+  background: linear-gradient(160deg, #F0FDFA 0%, var(--surface) 75%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+}
+.report-stat span {
+  font-size: 10.5px; font-weight: 700; color: var(--text-faded);
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.report-stat strong { display: block; font-size: 14px; color: var(--text); margin-top: 4px; }
+.report-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+}
+.report-section h4 {
+  font-size: 12px; font-weight: 700; color: var(--accent);
+  text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px;
+}
+.report-section p { font-size: 13.5px; line-height: 1.6; color: var(--text-soft); }
+.report-tops { display: flex; flex-direction: column; gap: 6px; }
+.report-top {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px; color: var(--text); font-weight: 500;
+}
+.report-top span {
+  width: 24px; height: 24px; flex-shrink: 0; border-radius: 7px;
+  background: var(--danger-bg); color: var(--danger);
+  font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* Resumo do lead no card — visual mais limpo */
+.summary-card {
+  background: linear-gradient(160deg, #F0FDFA 0%, var(--surface) 80%);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-md);
+  line-height: 1.6;
+}
+
+/* Impressão — mostra só o relatório */
+@media print {
+  body > * { display: none !important; }
+  body > #report-modal-backdrop {
+    display: block !important; position: static !important;
+    background: #fff !important; padding: 0 !important;
+  }
+  #report-modal-backdrop .modal {
+    box-shadow: none !important; max-height: none !important;
+    max-width: 100% !important; width: 100% !important; border: none !important;
+  }
+  #report-modal-backdrop .modal-head,
+  #report-modal-backdrop .modal-actions { display: none !important; }
+  #report-modal-backdrop .modal-body { overflow: visible !important; }
+}

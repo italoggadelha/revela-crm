@@ -162,13 +162,24 @@
 
   // Fallback chain: tenta unavatar.io (foto real IG), se não rola usa ui-avatars.com (colorido com inicial)
   // ui-avatars sempre funciona — gera SVG da inicial em cor randômica baseada no nome
+  // Avatar gerado localmente (SVG data-URI) — sempre funciona, sem depender
+  // de serviço externo. Cor derivada do nome.
+  const AVATAR_COLORS = ['#0F766E', '#6366F1', '#DB2777', '#EA580C', '#2563EB', '#9333EA', '#16A34A', '#CA8A04'];
+  function localAvatar(nome) {
+    const ini = initials(nome);
+    const s = String(nome || '?');
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    const bg = AVATAR_COLORS[h % AVATAR_COLORS.length];
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80">` +
+      `<rect width="80" height="80" rx="40" fill="${bg}"/>` +
+      `<text x="40" y="40" dy="0.35em" text-anchor="middle" font-family="Inter,Arial,sans-serif" ` +
+      `font-size="32" font-weight="700" fill="#ffffff">${ini}</text></svg>`;
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  }
+  // (mantido por compatibilidade — o 1º parâmetro era o handle do IG)
   function avatarUrl(handle, nome) {
-    const u = igUsername(handle);
-    const fallbackName = encodeURIComponent(nome || handle || '?');
-    const uiFallback = `https://ui-avatars.com/api/?name=${fallbackName}&background=0F766E&color=fff&rounded=true&bold=true&size=80&font-size=0.5`;
-    if (!u) return uiFallback;
-    // unavatar.io aceita um fallback URL — se o IG não tiver foto pública, redireciona pra ui-avatars
-    return `https://unavatar.io/instagram/${u}?fallback=${encodeURIComponent(uiFallback)}`;
+    return localAvatar(nome || handle);
   }
   function phoneDigits(phone) { return String(phone || '').replace(/\D/g, ''); }
   function whatsappLink(phone, fname) {
@@ -223,6 +234,37 @@
     clearTimeout(toast._t); toast._t = setTimeout(() => el.className = 'toast', 3000);
   }
   function topsToList(lead) { return [lead.top1, lead.top2, lead.top3].filter(Boolean); }
+
+  // Resumo interpretativo do lead, gerado a partir dos dados do diagnóstico.
+  function buildLeadSummary(lead) {
+    const nome = firstName(lead.nome) || 'Este lead';
+    const temp = leadTemperature(lead);
+    const tempTxt = {
+      5: 'um lead IDEAL — prioridade máxima de contato',
+      4: 'um lead muito quente — priorize a abordagem',
+      3: 'um lead quente, com bom potencial',
+      2: 'um lead morno — precisa de mais nutrição antes de avançar',
+      1: 'um lead frio — baixa prioridade neste momento'
+    }[temp] || 'um lead a ser avaliado';
+    const parts = [`${nome} é ${tempTxt}.`];
+    if (lead.faturamento) {
+      const low = /Até R\$ 5/.test(lead.faturamento);
+      const high = /Acima/.test(lead.faturamento);
+      parts.push(`Fatura ${lead.faturamento.toLowerCase()}` +
+        (low ? ' — orçamento mais apertado, ancore bem o valor na conversa.'
+          : high ? ' — bom poder de investimento.'
+            : ' — está na faixa ideal de investimento.'));
+    }
+    if (lead.momento) parts.push(`Momento do diagnóstico: ${lead.momento}.`);
+    if (lead.nota_geral != null) {
+      const n = Number(lead.nota_geral);
+      parts.push(`Nota geral de ${n.toFixed(2).replace('.', ',')}/5` +
+        (n < 2.5 ? ' — indica clareza grande da dor, ótimo para abordar agora.' : '.'));
+    }
+    const tops = topsToList(lead);
+    if (tops.length) parts.push(`Pontos mais críticos: ${tops.join('; ')}. Conduza a conversa por aí.`);
+    return parts.join(' ');
+  }
   function findStage(id) {
     return state.pipeline.find(s => s.id === id) || { id: id, label: id, color: '#94A3B8' };
   }
@@ -2699,21 +2741,10 @@
       av.style.display = 'none'; av.parentElement.textContent = initials(lead.nome);
     }
 
-    // Summary
+    // Resumo do lead — gerado a partir dos dados do diagnóstico
     const sumEl = $('modal-summary');
-    if (lead.instagram_summary) {
-      sumEl.textContent = lead.instagram_summary;
-      sumEl.classList.remove('loading');
-    } else {
-      sumEl.textContent = 'Gerando resumo';
-      sumEl.classList.add('loading');
-      ensureSummary(lead).then(s => {
-        if (state.currentLead?.id === id && s) {
-          sumEl.textContent = s;
-          sumEl.classList.remove('loading');
-        }
-      });
-    }
+    sumEl.textContent = lead.instagram_summary || buildLeadSummary(lead);
+    sumEl.classList.remove('loading');
 
     // Top 3
     const tops = topsToList(lead);
@@ -2752,14 +2783,63 @@
     const fname = firstName(lead.nome);
     $('modal-wa').href = whatsappLink(lead.telefone, fname);
     $('modal-ig').href = instagramLink(handle);
-    $('modal-report').href = reportLink(lead);
     $('modal-delete').style.display = isAdmin() ? '' : 'none';
 
     $('modal-backdrop').classList.add('show');
   }
 
+  // ─── Relatório do lead (dentro do CRM) ───
+  function openReportModal(lead) {
+    if (!lead) return;
+    $('report-modal-sub').textContent =
+      (lead.nome || 'Lead') + (lead.instagram ? ' · ' + lead.instagram : '');
+    const tops = topsToList(lead);
+    const nota = lead.nota_geral != null
+      ? Number(lead.nota_geral).toFixed(2).replace('.', ',') : '—';
+    const origem = lead.source_type
+      ? (sourceMeta(lead.source_type).icon + ' ' + sourceMeta(lead.source_type).label)
+      : (lead.origem || '—');
+    $('report-body').innerHTML = `
+      <div class="report-doc">
+        <div class="report-hd">
+          <div class="report-avatar"><img src="${avatarUrl(null, lead.nome)}" alt=""></div>
+          <div class="report-hd-info">
+            <h3>${escapeHtml(lead.nome || '—')}</h3>
+            <div class="report-hd-meta">${escapeHtml(lead.instagram || '')}${lead.telefone ? ' · ' + escapeHtml(lead.telefone) : ''}</div>
+            <div class="report-hd-meta">Diagnóstico em ${formatDate(lead.created_at)}</div>
+          </div>
+        </div>
+        <div class="report-stats">
+          <div class="report-stat"><span>Faturamento</span><strong>${escapeHtml(lead.faturamento || '—')}</strong></div>
+          <div class="report-stat"><span>Momento</span><strong>${escapeHtml(lead.momento || '—')}</strong></div>
+          <div class="report-stat"><span>Nota geral</span><strong>${nota} / 5</strong></div>
+        </div>
+        <div class="report-section">
+          <h4>Temperatura do lead</h4>
+          ${tempMeter(leadTemperature(lead))}
+        </div>
+        <div class="report-section">
+          <h4>Leitura do lead</h4>
+          <p>${escapeHtml(buildLeadSummary(lead))}</p>
+        </div>
+        <div class="report-section">
+          <h4>3 pontos mais críticos</h4>
+          ${tops.length
+            ? '<div class="report-tops">' + tops.map((t, i) =>
+                `<div class="report-top"><span>0${i + 1}</span>${escapeHtml(t)}</div>`).join('') + '</div>'
+            : '<p style="color:var(--text-faded)">Sem pontos críticos identificados.</p>'}
+        </div>
+        <div class="report-section">
+          <h4>Origem</h4>
+          <p>${escapeHtml(origem)}</p>
+        </div>
+      </div>`;
+    $('report-modal-backdrop').classList.add('show');
+  }
+
   function closeAllModals() {
     $('modal-backdrop').classList.remove('show');
+    $('report-modal-backdrop').classList.remove('show');
     $('edit-modal-backdrop').classList.remove('show');
     $('vendor-modal-backdrop').classList.remove('show');
     $('source-modal-backdrop').classList.remove('show');
@@ -2995,6 +3075,17 @@
 
     // Chat events
     bindChatEvents();
+
+    // Relatório do lead
+    $('modal-report').addEventListener('click', () => {
+      if (state.currentLead) openReportModal(state.currentLead);
+    });
+    $('report-modal-close').addEventListener('click', closeAllModals);
+    $('report-close-btn').addEventListener('click', closeAllModals);
+    $('report-modal-backdrop').addEventListener('click', e => {
+      if (e.target === $('report-modal-backdrop')) closeAllModals();
+    });
+    $('report-print').addEventListener('click', () => window.print());
 
     // Botão "Abrir chat interno" no modal de lead
     $('modal-chat').addEventListener('click', () => {
