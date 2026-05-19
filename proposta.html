@@ -253,6 +253,7 @@
     '<p>'+txt+'</p><div class="qa">'+who+'</div></div>';}
 
   function build(p){
+    var cst=p.custom||{};
     var nicho=p.client_niche||'o seu mercado';
     var deliv=(p.deliverables||[]).map(function(d){
       return '<div class="deliv-row"><span class="ico ck"><svg><use href="#ic-check"/></svg></span>'+
@@ -271,7 +272,7 @@
     slides=[
       slide('cover',
         R('<div class="brand"><span class="d"></span>MYLION</div>')+
-        R('<h1>Proposta<br>Comercial</h1>')+
+        R('<h1>'+(cst.cover_title?esc(cst.cover_title):'Proposta<br>Comercial')+'</h1>')+
         R('<div class="lead">Um plano sob medida para '+esc(p.client_name||'a sua empresa')+
           ' transformar a captação de clientes em um processo previsível, mensurável e escalável.</div>')+
         R('<div class="rule"></div>')+
@@ -282,9 +283,12 @@
         R(kick('compass','Resumo executivo'))+
         R('<h2>A proposta em <span class="em">um olhar</span></h2>')+
         R('<div class="summary-grid">'+
-          '<div class="summary-main"><h3>O essencial</h3><p>Esta proposta apresenta um plano completo de aquisição de clientes para '+
-            esc(p.client_name||'a sua empresa')+(p.client_niche?', no segmento de '+esc(p.client_niche):'')+
-            '. O objetivo é transformar a captação em um processo previsível e mensurável — da atração do lead certo ao fechamento — com acompanhamento próximo e decisões guiadas por dados.</p></div>'+
+          '<div class="summary-main"><h3>O essencial</h3><p>'+
+            (cst.summary ? esc(cst.summary).replace(/\n/g,'<br>')
+              : 'Esta proposta apresenta um plano completo de aquisição de clientes para '+
+                esc(p.client_name||'a sua empresa')+(p.client_niche?', no segmento de '+esc(p.client_niche):'')+
+                '. O objetivo é transformar a captação em um processo previsível e mensurável — da atração do lead certo ao fechamento — com acompanhamento próximo e decisões guiadas por dados.')+
+            '</p></div>'+
           '<div class="summary-side"><h3>Inclui</h3><ul>'+
             '<li>'+ic('check')+'<span>Diagnóstico e estratégia sob medida</span></li>'+
             '<li>'+ic('check')+'<span>Funil de vendas e automações</span></li>'+
@@ -302,7 +306,7 @@
       slide('',
         R(kick('spark','A solução'))+
         R('<h2>O que podemos fazer <span class="em">por você</span></h2>')+
-        R('<div class="lead">Trabalhamos três frentes que, juntas, formam uma máquina de aquisição completa — da atração do lead certo até o fechamento.</div>')+
+        R('<div class="lead">'+(cst.solution?esc(cst.solution).replace(/\n/g,'<br>'):'Trabalhamos três frentes que, juntas, formam uma máquina de aquisição completa — da atração do lead certo até o fechamento.')+'</div>')+
         R('<div class="grid">'+
           card('target','','Atrair','Levar até você as pessoas certas, de forma constante e mensurável — com tráfego pago e conteúdo estratégico, não por sorte.')+
           card('layers','','Estruturar','Montar um funil de vendas que recebe, qualifica e conduz cada lead até a conversa de fechamento.')+
@@ -390,7 +394,7 @@
       slide('cover',
         R(kick('flag','Vamos juntos?'))+
         R('<h1>Sua máquina de vendas<br>começa <span class="em">agora</span></h1>')+
-        R('<div class="lead">Você pode continuar dependendo de indicação e da sorte — ou construir, a partir de hoje, um processo de aquisição que cresce com o seu negócio.</div>')+
+        R('<div class="lead">'+(cst.closing?esc(cst.closing).replace(/\n/g,'<br>'):'Você pode continuar dependendo de indicação e da sorte — ou construir, a partir de hoje, um processo de aquisição que cresce com o seu negócio.')+'</div>')+
         R('<div class="lead">A MyLion já fez isso por outros negócios. O próximo passo é simples: aceitar esta proposta e começar.</div>')),
 
       acceptSlide(p)

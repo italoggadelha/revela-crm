@@ -51,6 +51,7 @@ Deno.serve(async (req) => {
       setup_fee: p.setup_fee,
       monthly_fee: p.monthly_fee,
       contract_months: p.contract_months,
+      custom: p.custom || {},
       status: p.status,
       vendedor,
       created_at: p.created_at,

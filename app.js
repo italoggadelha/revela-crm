@@ -28,6 +28,9 @@
     user: null,
     profile: null,
     profiles: [],
+    projects: [],
+    projectId: null,
+    captureChannels: [],
     pipeline: [],
     leads: [],
     filtered: [],
@@ -43,6 +46,7 @@
     tasks: [],
     editingTask: null,
     editingSubtasks: [],
+    expandedTasks: {},
     taskFilter: 'pending',
     // Playbook
     playbookTab: '',
@@ -251,13 +255,16 @@
   }
   function leadScore(lead) { return leadScoreParts(lead).total; }
 
-  // Gradiente laranja — quanto maior o score, mais intenso
+  // Gradiente laranja — frio = bem claro, esquentando até o quente intenso
   function scoreColor(score) {
-    if (score >= 81) return '#C2410C';
-    if (score >= 51) return '#EA580C';
-    if (score >= 21) return '#F97316';
-    return '#FDBA74';
+    if (score >= 85) return '#9A2D06';
+    if (score >= 65) return '#DC5A0E';
+    if (score >= 45) return '#F59E42';
+    if (score >= 25) return '#FBC889';
+    return '#FDE2C3';
   }
+  // Cor do texto sobre o selo (fundo claro pede texto escuro)
+  function scoreTextColor(score) { return score >= 45 ? '#FFFFFF' : '#9A3412'; }
   // Ícones de fogo — só para leads muito quentes
   function flameCount(score) {
     return score >= 95 ? 3 : score >= 85 ? 2 : score >= 70 ? 1 : 0;
@@ -277,12 +284,13 @@
     else if (score >= 65) label = 'Quente';
     else if (score >= 45) label = 'Morno';
     else label = 'Frio';
-    return { score, label, color: scoreColor(score), flames: scoreFlames(score) };
+    return { score, label, color: scoreColor(score),
+      txt: scoreTextColor(score), hot: score >= 65, flames: scoreFlames(score) };
   }
   // Selo compacto (card / lista)
   function scoreBadge(lead) {
     const inf = scoreInfo(lead);
-    return `<div class="score-badge" style="--sc:${inf.color}" title="Lead score: ${inf.score}/100 — ${inf.label}">
+    return `<div class="score-badge${inf.hot ? ' hot' : ''}" style="--sc:${inf.color};--sct:${inf.txt}" title="Lead score: ${inf.score}/100 — ${inf.label}">
       <span class="score-badge-num">${inf.score}</span>
       <span class="score-badge-lb">${inf.label}</span>
       ${inf.flames}
@@ -350,9 +358,20 @@
       `font-size="32" font-weight="700" fill="#ffffff">${ini}</text></svg>`;
     return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
   }
-  // (mantido por compatibilidade — o 1º parâmetro era o handle do IG)
+  // Foto do perfil do Instagram (via unavatar.io). fallback=false → 404 quando
+  // não acha, para o onerror cair no avatar local colorido.
+  function igPhoto(handle) {
+    const u = igUsername(handle);
+    return u ? 'https://unavatar.io/instagram/' + encodeURIComponent(u) + '?fallback=false' : null;
+  }
+  // Avatar do lead: tenta a foto real do Instagram, senão o avatar local.
   function avatarUrl(handle, nome) {
-    return localAvatar(nome || handle);
+    return igPhoto(handle) || localAvatar(nome || handle);
+  }
+  // Valor para o atributo onerror — cai no avatar local (SVG colorido).
+  // O data-URI do localAvatar não tem aspas, então é seguro embutir inline.
+  function avatarFallback(nome) {
+    return "this.onerror=null;this.src='" + localAvatar(nome) + "'";
   }
   function phoneDigits(phone) { return String(phone || '').replace(/\D/g, ''); }
   function whatsappLink(phone, fname) {
@@ -499,7 +518,7 @@
     $('app').classList.remove('show');
   }
 
-  function showApp() {
+  async function showApp() {
     $('login-screen').style.display = 'none';
     $('app').classList.add('show');
 
@@ -520,20 +539,97 @@
     // Aplica permissões: esconde abas que o user não pode ver
     applyNavPermissions();
 
-    // Load tudo
+    // Carrega projetos e decide qual abrir
+    await loadProjects();
+    const saved = localStorage.getItem('crm_project');
+    if (saved && state.projects.find(p => p.id === saved)) {
+      state.projectId = saved;
+      bootProjectData();
+    } else if (state.projects.length === 1) {
+      state.projectId = state.projects[0].id;
+      localStorage.setItem('crm_project', state.projectId);
+      bootProjectData();
+    } else {
+      showProjectPicker();
+    }
+  }
+
+  // Carrega todos os dados do projeto selecionado e renderiza o app
+  function bootProjectData() {
+    localStorage.setItem('crm_project', state.projectId);
+    renderProjectSwitch();
     Promise.all([loadPipeline(), loadProfiles(), loadLeads(), loadConversations(), loadTasks(), loadAppointments(), loadScheduledMessages(), loadNotifications(), loadAutomations(), loadProposals()]).then(() => {
       renderAll();
       renderNotifications();
       subscribeRealtime();
-      // View inicial: respeita o hash da URL (não volta sempre pro Dashboard)
       const hv = (location.hash || '').replace('#', '');
       const hvBtn = hv && document.querySelector('.nav-item[data-view="' + hv + '"]');
       if (hvBtn && hvBtn.style.display !== 'none') switchView(hv);
       else ensureValidView();
-      // Conexão Google: trata retorno do OAuth e atualiza status
       handleGoogleOAuthReturn();
       refreshGoogleStatus();
     });
+  }
+
+  // ─── Projetos (multi-projeto) ───
+  async function loadProjects() {
+    const { data, error } = await supabase.from('projects')
+      .select('*').order('created_at', { ascending: true });
+    if (error) { console.warn('Projects falhou', error); state.projects = []; return; }
+    state.projects = data || [];
+  }
+  function currentProject() {
+    return state.projects.find(p => p.id === state.projectId) || null;
+  }
+  function showProjectPicker() {
+    const pk = $('project-picker');
+    if (!pk) return;
+    $('project-picker-list').innerHTML = state.projects.map(p => `
+      <button class="project-pick-card" data-pick="${p.id}" style="--pc:${p.color || '#0F766E'}">
+        <span class="project-pick-dot"></span>
+        <span class="project-pick-name">${escapeHtml(p.name)}</span>
+        <span class="project-pick-go">Abrir →</span>
+      </button>`).join('') ||
+      '<div style="color:var(--text-muted);font-size:13px">Nenhum projeto cadastrado.</div>';
+    pk.querySelectorAll('[data-pick]').forEach(b => {
+      b.addEventListener('click', () => {
+        state.projectId = b.dataset.pick;
+        pk.classList.remove('show');
+        bootProjectData();
+      });
+    });
+    pk.classList.add('show');
+  }
+  function renderProjectSwitch() {
+    const cur = currentProject();
+    const btn = $('project-current');
+    const dot = $('project-dot');
+    if (btn) btn.textContent = cur ? cur.name : 'Projeto';
+    if (dot && cur) dot.style.background = cur.color || '#0F766E';
+    const menu = $('project-menu');
+    if (menu) {
+      menu.innerHTML = state.projects.map(p => `
+        <button class="project-menu-item ${p.id === state.projectId ? 'active' : ''}" data-proj="${p.id}">
+          <span class="project-menu-dot" style="background:${p.color || '#0F766E'}"></span>
+          ${escapeHtml(p.name)}
+        </button>`).join('');
+      menu.querySelectorAll('[data-proj]').forEach(b => {
+        b.addEventListener('click', () => {
+          $('project-switch').classList.remove('open');
+          if (b.dataset.proj !== state.projectId) switchProject(b.dataset.proj);
+        });
+      });
+    }
+  }
+  function switchProject(id) {
+    state.projectId = id;
+    localStorage.setItem('crm_project', id);
+    // limpa caches do projeto anterior
+    state.messages = {};
+    state.activeConversationId = null;
+    state.leadHistory = {};
+    bootProjectData();
+    toast('Projeto: ' + (currentProject() ? currentProject().name : ''), 'success');
   }
 
   function applyNavPermissions() {
@@ -565,7 +661,8 @@
   // DATA: pipeline_config, profiles, leads
   // ═══════════════════════════════════════════════════════════════════
   async function loadPipeline() {
-    const { data, error } = await supabase.from('pipeline_config').select('columns').eq('id', 1).maybeSingle();
+    const { data, error } = await supabase.from('pipeline_config')
+      .select('columns').eq('project_id', state.projectId).maybeSingle();
     if (error || !data) {
       console.warn('Pipeline config falhou, usando default', error);
       state.pipeline = defaultPipeline();
@@ -589,7 +686,7 @@
   async function savePipeline(columns) {
     const { error } = await supabase.from('pipeline_config')
       .update({ columns, updated_at: new Date().toISOString(), updated_by: state.user.id })
-      .eq('id', 1);
+      .eq('project_id', state.projectId);
     if (error) { toast('Erro: ' + error.message, 'error'); return false; }
     state.pipeline = columns;
     toast('Pipeline salvo', 'success');
@@ -604,7 +701,8 @@
   }
 
   async function loadLeads() {
-    const { data, error } = await supabase.from('leads').select('*').order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('leads').select('*')
+      .eq('project_id', state.projectId).order('created_at', { ascending: false });
     if (error) { toast('Erro ao carregar: ' + error.message, 'error'); return; }
     state.leads = data || [];
   }
@@ -671,7 +769,8 @@
     realtimeChannel = supabase.channel('crm-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, payload => {
         if (payload.eventType === 'INSERT') {
-          if (!state.leads.find(l => l.id === payload.new.id)) {
+          if (payload.new.project_id === state.projectId &&
+              !state.leads.find(l => l.id === payload.new.id)) {
             state.leads.unshift(payload.new);
             renderAll();
             toast(`Novo lead: ${payload.new.nome}`, 'success');
@@ -935,9 +1034,7 @@
       <div class="card" data-lead-id="${lead.id}">
         <div class="card-top">
           <div class="card-avatar">
-            ${avatar
-              ? `<img src="${avatar}" alt="" onerror="this.parentElement.textContent='${initials(lead.nome)}';">`
-              : initials(lead.nome)}
+            <img src="${avatar}" alt="" onerror="${avatarFallback(lead.nome)}">
           </div>
           <div class="card-identity">
             <div class="card-name">${escapeHtml(lead.nome)}</div>
@@ -1056,7 +1153,7 @@
           <td>
             <div class="contact-name-cell">
               <div class="contact-avatar">
-                ${av ? `<img src="${av}" alt="" onerror="this.parentElement.textContent='${initials(l.nome)}'">` : initials(l.nome)}
+                <img src="${av}" alt="" onerror="${avatarFallback(l.nome)}">
               </div>
               <div>
                 <div class="contact-name-text">${escapeHtml(l.nome || '—')}${isClient ? '<span class="contact-client-tag">Cliente</span>' : ''}</div>
@@ -1393,7 +1490,10 @@
       const next = reached[i + 1];
       const advance = (i < fstages.length - 1 && count > 0) ? Math.round(next / count * 100) : null;
       const loss = advance != null ? 100 - advance : null;
-      const width = Math.max(15, Math.round(count / top * 100));
+      // Largura em formato de funil: cada etapa estreita progressivamente
+      const width = fstages.length > 1
+        ? Math.round(100 - (i / (fstages.length - 1)) * 58)
+        : 100;
       return `
         <div class="vfunnel-step">
           <div class="vfunnel-shapecol">
@@ -1649,7 +1749,7 @@
     const av = avatarUrl(l.instagram, l.nome);
     return `
       <div class="mini-lead-row" data-lead-id="${l.id}">
-        <div class="mini-lead-avatar"><img src="${av}" alt="" onerror="this.parentElement.textContent='${initials(l.nome)}'"></div>
+        <div class="mini-lead-avatar"><img src="${av}" alt="" onerror="${avatarFallback(l.nome)}"></div>
         <div class="mini-lead-info">
           <div class="mini-lead-name">${escapeHtml(l.nome)} ${scoreBadge(l)}</div>
           <div class="mini-lead-meta">${escapeHtml(l.instagram || '')} · ${escapeHtml(l.faturamento || '—')}${l.source_campaign ? ' · ' + escapeHtml(l.source_campaign) : ''}</div>
@@ -1714,7 +1814,8 @@
   // ═══════════════════════════════════════════════════════════════════
   async function loadTasks() {
     const { data, error } = await supabase
-      .from('tasks').select('*').order('created_at', { ascending: false });
+      .from('tasks').select('*').eq('project_id', state.projectId)
+      .order('created_at', { ascending: false });
     if (error) { console.warn('Tasks falhou', error); state.tasks = []; return; }
     state.tasks = data || [];
   }
@@ -1793,34 +1894,76 @@
       : '';
     const subs = Array.isArray(t.subtasks) ? t.subtasks : [];
     const subDone = subs.filter(s => s.done).length;
-    const subBar = subs.length
-      ? `<div class="task-sub-prog" title="${subDone}/${subs.length} subtarefas concluídas">
+    const hasSubs = subs.length > 0;
+    const expanded = !!(state.expandedTasks && state.expandedTasks[t.id]);
+    const subProg = hasSubs
+      ? `<div class="task-sub-prog">
            <span class="task-sub-bar"><span style="width:${Math.round(subDone / subs.length * 100)}%"></span></span>
-           <span class="task-sub-count">${subDone}/${subs.length} subtarefas</span>
+         </div>`
+      : '';
+    const subToggle = hasSubs
+      ? `<button class="task-sub-toggle ${expanded ? 'open' : ''}" data-task-subs="${t.id}"
+                 title="${expanded ? 'Ocultar subtarefas' : 'Mostrar subtarefas'}">
+           <span>${subDone}/${subs.length}</span>
+           <svg viewBox="0 0 24 24"><use href="#i-arrow-down"/></svg>
+         </button>`
+      : '';
+    const subsPanel = hasSubs
+      ? `<div class="task-subs ${expanded ? 'open' : ''}">
+          ${subs.map((s, i) => {
+            const sp = s.assignee ? profileById(s.assignee) : null;
+            const sOverdue = !s.done && s.due && s.due < today;
+            return `<div class="task-sub-item ${s.done ? 'done' : ''}">
+              <button class="subtask-check ${s.done ? 'checked' : ''}" data-subtask-toggle="${t.id}:${i}" title="${s.done ? 'Reabrir' : 'Concluir'}">
+                <svg><use href="#i-check"/></svg>
+              </button>
+              <span class="task-sub-name">${escapeHtml(s.title)}</span>
+              ${sp ? `<span class="task-sub-meta">👤 ${escapeHtml(firstName(sp.nome) || profileName(sp))}</span>` : ''}
+              ${s.due ? `<span class="task-sub-meta ${sOverdue ? 'overdue' : ''}">📅 ${formatTaskDate(s.due)}</span>` : ''}
+            </div>`;
+          }).join('')}
          </div>`
       : '';
     return `
-      <div class="task-row ${t.done ? 'done' : ''}" data-task-id="${t.id}">
-        <button class="task-check ${t.done ? 'checked' : ''}" data-task-toggle="${t.id}"
-                title="${t.done ? 'Reabrir tarefa' : 'Concluir tarefa'}">
-          <svg><use href="#i-check"/></svg>
-        </button>
-        <div class="task-row-main" data-task-open="${t.id}">
-          <div class="task-row-title">
-            ${t.priority === 'alta' ? '<span class="task-prio-dot" title="Prioridade alta"></span>' : ''}
-            ${escapeHtml(t.title)}
+      <div class="task-item">
+        <div class="task-row ${t.done ? 'done' : ''}" data-task-id="${t.id}">
+          <button class="task-check ${t.done ? 'checked' : ''}" data-task-toggle="${t.id}"
+                  title="${t.done ? 'Reabrir tarefa' : 'Concluir tarefa'}">
+            <svg><use href="#i-check"/></svg>
+          </button>
+          <div class="task-row-main" data-task-open="${t.id}">
+            <div class="task-row-title">
+              ${t.priority === 'alta' ? '<span class="task-prio-dot" title="Prioridade alta"></span>' : ''}
+              ${escapeHtml(t.title)}
+            </div>
+            ${t.description ? `<div class="task-row-desc">${escapeHtml(t.description)}</div>` : ''}
+            ${subProg}
           </div>
-          ${t.description ? `<div class="task-row-desc">${escapeHtml(t.description)}</div>` : ''}
-          ${subBar}
+          ${subToggle}
+          ${leadChip}
+          ${respChip}
+          ${dueLabel ? `<span class="task-due ${overdue ? 'overdue' : ''} ${dueToday ? 'today' : ''}">
+            <svg><use href="#i-calendar"/></svg>${dueLabel}</span>` : ''}
+          <button class="task-row-del" data-task-del="${t.id}" title="Excluir tarefa">
+            <svg><use href="#i-trash"/></svg>
+          </button>
         </div>
-        ${leadChip}
-        ${respChip}
-        ${dueLabel ? `<span class="task-due ${overdue ? 'overdue' : ''} ${dueToday ? 'today' : ''}">
-          <svg><use href="#i-calendar"/></svg>${dueLabel}</span>` : ''}
-        <button class="task-row-del" data-task-del="${t.id}" title="Excluir tarefa">
-          <svg><use href="#i-trash"/></svg>
-        </button>
+        ${subsPanel}
       </div>`;
+  }
+
+  async function toggleSubtaskDone(taskId, idx) {
+    const t = state.tasks.find(x => x.id === taskId);
+    if (!t || !Array.isArray(t.subtasks) || !t.subtasks[idx]) return;
+    t.subtasks[idx].done = !t.subtasks[idx].done;
+    renderTasks();
+    const { error } = await supabase.from('tasks')
+      .update({ subtasks: t.subtasks }).eq('id', taskId);
+    if (error) {
+      t.subtasks[idx].done = !t.subtasks[idx].done;
+      renderTasks();
+      toast('Erro: ' + error.message, 'error');
+    }
   }
 
   // ─── Editor de subtarefas ───
@@ -1937,7 +2080,8 @@
         : null,
       vendedor_id: $('task-assignee').value || state.user.id,
       lead_id: $('task-lead').value || null,
-      subtasks: state.editingSubtasks.filter(s => (s.title || '').trim())
+      subtasks: state.editingSubtasks.filter(s => (s.title || '').trim()),
+      project_id: state.projectId
     };
     const btn = $('task-save');
     btn.disabled = true;
@@ -1995,7 +2139,8 @@
 
   async function loadAppointments() {
     const { data, error } = await supabase
-      .from('appointments').select('*').order('starts_at', { ascending: true });
+      .from('appointments').select('*').eq('project_id', state.projectId)
+      .order('starts_at', { ascending: true });
     if (error) { console.warn('Appointments falhou', error); state.appointments = []; return; }
     state.appointments = data || [];
   }
@@ -2195,7 +2340,7 @@
       const novos = events.filter(e => e.google_event_id && !known.has(e.google_event_id));
       if (!novos.length) { toast('Agenda já está sincronizada — nada novo no Google', 'success'); return; }
       const rows = novos.map(e => ({
-        vendedor_id: state.user.id,
+        vendedor_id: state.user.id, project_id: state.projectId,
         title: e.title, starts_at: e.starts_at, ends_at: e.ends_at,
         location: e.location, notes: e.notes, google_event_id: e.google_event_id
       }));
@@ -2352,6 +2497,7 @@
         .update(patch).eq('id', editing.id).select().single());
     } else {
       patch.vendedor_id = state.user.id;
+      patch.project_id = state.projectId;
       ({ data: saved, error } = await supabase.from('appointments')
         .insert(patch).select().single());
     }
@@ -2386,7 +2532,8 @@
   // ═══════════════════════════════════════════════════════════════════
   async function loadScheduledMessages() {
     const { data, error } = await supabase
-      .from('scheduled_messages').select('*').order('send_at', { ascending: true });
+      .from('scheduled_messages').select('*').eq('project_id', state.projectId)
+      .order('send_at', { ascending: true });
     if (error) { console.warn('Scheduled messages falhou', error); state.scheduledMessages = []; return; }
     state.scheduledMessages = data || [];
   }
@@ -2455,7 +2602,8 @@
 
   async function loadAutomations() {
     const { data } = await supabase.from('automations')
-      .select('*').order('created_at', { ascending: true });
+      .select('*').eq('project_id', state.projectId)
+      .order('created_at', { ascending: true });
     state.automations = data || [];
   }
 
@@ -2588,7 +2736,8 @@
     const { error } = await supabase.from('automations').insert({
       name: (a.name || 'Automação') + ' (cópia)', kind: a.kind || 'automacao',
       trigger_type: a.trigger_type, trigger_config: a.trigger_config,
-      steps: a.steps, edges: a.edges, active: false, created_by: state.user.id
+      steps: a.steps, edges: a.edges, active: false, created_by: state.user.id,
+      project_id: state.projectId
     });
     if (error) { toast('Erro: ' + error.message, 'error'); return; }
     await loadAutomations();
@@ -2964,6 +3113,7 @@
     let error;
     if (a.id === 'new') {
       payload.created_by = state.user.id;
+      payload.project_id = state.projectId;
       ({ error } = await supabase.from('automations').insert(payload));
     } else {
       ({ error } = await supabase.from('automations').update(payload).eq('id', a.id));
@@ -3086,8 +3236,97 @@
     pipeline: 'settings-pipeline',
     vendors: 'settings-vendors',
     whatsapp: 'settings-whatsapp',
-    google: 'settings-google'
+    google: 'settings-google',
+    capture: 'settings-capture'
   };
+
+  // ─── Captação de leads (canais) ───
+  async function loadCaptureChannels() {
+    const { data } = await supabase.from('capture_channels')
+      .select('*').eq('project_id', state.projectId)
+      .order('created_at', { ascending: true });
+    state.captureChannels = data || [];
+  }
+  function captureEndpoint() {
+    return CONFIG.SUPABASE_URL + '/functions/v1/lead-capture';
+  }
+  function renderCaptureChannels() {
+    const ep = $('capture-endpoint');
+    if (ep) ep.textContent = captureEndpoint();
+    const list = $('capture-list');
+    if (!list) return;
+    if (!state.captureChannels.length) {
+      list.innerHTML = `<div class="empty-state"><div class="empty-state-text">
+        Nenhum canal de captação ainda. Clique em "Novo canal".</div></div>`;
+      return;
+    }
+    list.innerHTML = state.captureChannels.map(c => {
+      const leadCount = state.leads.filter(l =>
+        l.origem === 'Captação: ' + c.name).length;
+      return `<div class="capture-card ${c.active ? '' : 'off'}">
+        <div class="capture-card-main">
+          <div class="capture-card-name">
+            ${escapeHtml(c.name)}
+            <span class="capture-src">${sourceMeta(c.source_type).icon} ${escapeHtml(sourceMeta(c.source_type).label)}</span>
+          </div>
+          <div class="capture-card-slug">slug: <code>${escapeHtml(c.slug)}</code> · ${leadCount} lead(s)</div>
+          <div class="capture-snippet">curl -X POST ${captureEndpoint()} -H "Content-Type: application/json" -d '{"channel":"${escapeHtml(c.slug)}","lead":{"nome":"...","telefone":"..."}}'</div>
+        </div>
+        <div class="capture-card-actions">
+          <button class="auto-toggle ${c.active ? 'on' : 'off'}" data-ch-toggle="${c.id}" title="${c.active ? 'Ativo' : 'Inativo'}"><span class="auto-toggle-knob"></span></button>
+          <button class="row-action" data-ch-copy="${c.id}" title="Copiar payload de exemplo"><svg><use href="#i-report"/></svg></button>
+          <button class="row-action danger" data-ch-del="${c.id}" title="Excluir canal"><svg><use href="#i-trash"/></svg></button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  function openChannelModal() {
+    $('channel-name').value = '';
+    $('channel-source').value = 'outro';
+    $('channel-active').checked = true;
+    $('channel-modal-backdrop').classList.add('show');
+    setTimeout(() => $('channel-name').focus(), 60);
+  }
+  function slugify(s) {
+    return (String(s || '').toLowerCase().normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 28)) || 'canal';
+  }
+  async function saveChannel() {
+    const name = $('channel-name').value.trim();
+    if (!name) { toast('Dê um nome ao canal', 'error'); return; }
+    const slug = slugify(name) + '-' + Math.random().toString(36).slice(2, 6);
+    const btn = $('channel-save');
+    btn.disabled = true;
+    const { error } = await supabase.from('capture_channels').insert({
+      project_id: state.projectId, name, slug,
+      source_type: $('channel-source').value || 'outro',
+      active: $('channel-active').checked
+    });
+    btn.disabled = false;
+    if (error) { toast('Erro: ' + error.message, 'error'); return; }
+    await loadCaptureChannels();
+    renderCaptureChannels();
+    $('channel-modal-backdrop').classList.remove('show');
+    toast('Canal de captação criado', 'success');
+  }
+  async function toggleChannel(id) {
+    const c = state.captureChannels.find(x => x.id === id);
+    if (!c) return;
+    c.active = !c.active;
+    renderCaptureChannels();
+    const { error } = await supabase.from('capture_channels')
+      .update({ active: c.active }).eq('id', id);
+    if (error) { c.active = !c.active; renderCaptureChannels(); toast('Erro: ' + error.message, 'error'); }
+  }
+  async function deleteChannel(id) {
+    if (!confirm('Excluir este canal de captação? O endpoint deixa de funcionar.')) return;
+    const { error } = await supabase.from('capture_channels').delete().eq('id', id);
+    if (error) { toast('Erro: ' + error.message, 'error'); return; }
+    state.captureChannels = state.captureChannels.filter(c => c.id !== id);
+    renderCaptureChannels();
+    toast('Canal excluído', 'success');
+  }
 
   function showSettingsSection(section) {
     if (!SETTINGS_SECTIONS[section]) section = 'profile';
@@ -3158,7 +3397,8 @@
 
   async function loadProposals() {
     const { data, error } = await supabase
-      .from('proposals').select('*').order('created_at', { ascending: false });
+      .from('proposals').select('*').eq('project_id', state.projectId)
+      .order('created_at', { ascending: false });
     if (error) { console.warn('Proposals falhou', error); state.proposals = []; return; }
     state.proposals = data || [];
   }
@@ -3185,6 +3425,8 @@
             ? `<div class="proposta-row-acc">✅ Aceita por ${escapeHtml(p.accepted_data.nome || 'cliente')}</div>` : ''}
         </div>
         <span class="proposta-st proposta-st-${p.status}">${stLabel[p.status] || p.status}</span>
+        <button class="proposta-act proposta-act-open" data-prop-view="${p.id}" title="Abrir a apresentação">
+          <svg><use href="#i-expand"/></svg></button>
         <button class="proposta-act" data-prop-link="${p.id}" title="Copiar link da apresentação">
           <svg><use href="#i-report"/></svg></button>
         <button class="proposta-act danger" data-prop-del="${p.id}" title="Excluir">
@@ -3208,6 +3450,11 @@
     $('proposta-monthly').value = p && p.monthly_fee != null ? p.monthly_fee : '';
     $('proposta-months').value = p && p.contract_months != null ? p.contract_months : '';
     $('proposta-transcription').value = p ? (p.transcription || '') : '';
+    const cst = (p && p.custom) || {};
+    $('proposta-cover-title').value = cst.cover_title || '';
+    $('proposta-summary').value = cst.summary || '';
+    $('proposta-solution').value = cst.solution || '';
+    $('proposta-closing').value = cst.closing || '';
     const chosen = p ? (p.deliverables || []) : PROPOSAL_DELIVERABLES.slice(0, 3);
     $('proposta-delivs').innerHTML = PROPOSAL_DELIVERABLES.map(d =>
       `<label class="perm-check"><input type="checkbox" value="${escapeHtml(d)}" ${chosen.includes(d) ? 'checked' : ''}><span>${escapeHtml(d)}</span></label>`
@@ -3235,7 +3482,13 @@
       setup_fee: numOrNull($('proposta-setup').value),
       monthly_fee: numOrNull($('proposta-monthly').value),
       contract_months: numOrNull($('proposta-months').value),
-      transcription: $('proposta-transcription').value.trim() || null
+      transcription: $('proposta-transcription').value.trim() || null,
+      custom: {
+        cover_title: $('proposta-cover-title').value.trim() || null,
+        summary: $('proposta-summary').value.trim() || null,
+        solution: $('proposta-solution').value.trim() || null,
+        closing: $('proposta-closing').value.trim() || null
+      }
     };
     const editing = state.editingProposal;
     const btn = $('proposta-save');
@@ -3245,6 +3498,7 @@
       ({ data: saved, error } = await supabase.from('proposals').update(patch).eq('id', editing.id).select().single());
     } else {
       patch.vendedor_id = state.user.id;
+      patch.project_id = state.projectId;
       ({ data: saved, error } = await supabase.from('proposals').insert(patch).select().single());
     }
     btn.disabled = false;
@@ -3292,6 +3546,8 @@
       renderVendors();
       loadWhatsAppConfig();
       loadGoogleConfig();
+      renderCaptureChannels();
+      loadCaptureChannels().then(renderCaptureChannels);
     }
   }
 
@@ -3602,10 +3858,12 @@
   async function loadConversations() {
     const { data, error } = await supabase
       .from('conversations')
-      .select('*, leads(id, nome, telefone, instagram)')
+      .select('*, leads(id, nome, telefone, instagram, project_id)')
       .order('last_message_at', { ascending: false, nullsFirst: false });
     if (error) { console.warn('Erro conversations:', error); return; }
-    state.conversations = data || [];
+    // Mostra só conversas de leads do projeto atual
+    state.conversations = (data || []).filter(c =>
+      c.leads && c.leads.project_id === state.projectId);
     updateChatUnreadBadge();
   }
 
@@ -3662,7 +3920,7 @@
     state.chatInfoLead = lead;
     state.chatInfoLeadId = leadId;
 
-    $('ci-avatar').innerHTML = `<img src="${avatarUrl(null, lead.nome)}" alt="">`;
+    $('ci-avatar').innerHTML = `<img src="${avatarUrl(lead.instagram, lead.nome)}" alt="" onerror="${avatarFallback(lead.nome)}">`;
     $('ci-name').textContent = lead.nome || basic.telefone || '—';
     $('ci-sub').textContent = [lead.instagram, lead.telefone || basic.telefone].filter(Boolean).join(' · ') || '—';
 
@@ -3764,7 +4022,7 @@
       return `
         <div class="chat-list-item ${isActive ? 'active' : ''}" data-conv-id="${c.id}">
           <div class="chat-list-avatar">
-            <img src="${av}" alt="" onerror="this.parentElement.textContent='${initials(lead.nome)}'">
+            <img src="${av}" alt="" onerror="${avatarFallback(lead.nome)}">
           </div>
           <div class="chat-list-info">
             <div class="chat-list-name">${escapeHtml(lead.nome || lead.telefone || '—')}</div>
@@ -3802,7 +4060,7 @@
     $('chat-thread-meta').textContent = `${lead.instagram || ''} · ${lead.telefone || conv.whatsapp_phone}`;
 
     const av = $('chat-thread-avatar');
-    av.innerHTML = `<img src="${avatarUrl(lead.instagram, lead.nome)}" alt="" onerror="this.parentElement.textContent='${initials(lead.nome)}'">`;
+    av.innerHTML = `<img src="${avatarUrl(lead.instagram, lead.nome)}" alt="" onerror="${avatarFallback(lead.nome)}">`;
 
     // Renderiza mensagens
     const msgs = state.messages[conv.id] || [];
@@ -4125,15 +4383,11 @@
     const tempEl = $('modal-temp');
     if (tempEl) tempEl.innerHTML = scoreGauge(lead);
 
-    // Avatar
+    // Avatar — foto do Instagram, com fallback no avatar local
     const av = $('modal-avatar-img');
-    const url = avatarUrl(handle, lead.nome);
-    if (url) {
-      av.src = url; av.style.display = '';
-      av.onerror = () => { av.style.display = 'none'; av.parentElement.textContent = initials(lead.nome); };
-    } else {
-      av.style.display = 'none'; av.parentElement.textContent = initials(lead.nome);
-    }
+    av.style.display = '';
+    av.onerror = () => { av.onerror = null; av.src = localAvatar(lead.nome); };
+    av.src = avatarUrl(handle, lead.nome);
 
     // Resumo do lead — gerado a partir dos dados do diagnóstico
     const sumEl = $('modal-summary');
@@ -4317,7 +4571,7 @@
     $('report-body').innerHTML = `
       <div class="report-doc">
         <div class="report-hd">
-          <div class="report-avatar"><img src="${avatarUrl(null, lead.nome)}" alt=""></div>
+          <div class="report-avatar"><img src="${avatarUrl(lead.instagram, lead.nome)}" alt="" onerror="${avatarFallback(lead.nome)}"></div>
           <div class="report-hd-info">
             <h3>${escapeHtml(lead.nome || '—')}</h3>
             <div class="report-hd-meta">${escapeHtml(lead.instagram || '')}${lead.telefone ? ' · ' + escapeHtml(lead.telefone) : ''}${lead.email ? ' · ' + escapeHtml(lead.email) : ''}</div>
@@ -4398,6 +4652,8 @@
     if (cm) cm.classList.remove('show');
     const ab = $('auto-builder-backdrop');
     if (ab) ab.classList.remove('show');
+    const chm = $('channel-modal-backdrop');
+    if (chm) chm.classList.remove('show');
     state.editingProposal = null;
     state.currentLead = null;
     state.editingLead = null;
@@ -4568,6 +4824,7 @@
     } else {
       form.origem = 'Cadastro manual';
       form.resumo_manual = state.contactProfileText || buildContactProfile(form);
+      form.project_id = state.projectId;
       ({ error } = await supabase.from('leads').insert(form));
     }
     btn.disabled = false;
@@ -4672,6 +4929,18 @@
         if (action === 'profile') switchView('settings');
       });
     });
+
+    // Seletor de projeto (sidebar)
+    const projSwitch = $('project-switch');
+    if (projSwitch) {
+      $('project-switch-btn').addEventListener('click', e => {
+        e.stopPropagation();
+        projSwitch.classList.toggle('open');
+      });
+      document.addEventListener('click', e => {
+        if (!e.target.closest('#project-switch')) projSwitch.classList.remove('open');
+      });
+    }
 
     // Navegação
     $$('.nav-item').forEach(b => {
@@ -4824,6 +5093,30 @@
     // Save Google config
     $('btn-save-google').addEventListener('click', saveGoogleConfig);
 
+    // Captação de leads — canais
+    $('btn-add-channel').addEventListener('click', openChannelModal);
+    $('channel-modal-close').addEventListener('click', closeAllModals);
+    $('channel-cancel').addEventListener('click', closeAllModals);
+    $('channel-modal-backdrop').addEventListener('click', e => {
+      if (e.target === $('channel-modal-backdrop')) closeAllModals();
+    });
+    $('channel-save').addEventListener('click', saveChannel);
+    $('capture-list').addEventListener('click', e => {
+      const tg = e.target.closest('[data-ch-toggle]');
+      if (tg) { toggleChannel(tg.dataset.chToggle); return; }
+      const del = e.target.closest('[data-ch-del]');
+      if (del) { deleteChannel(del.dataset.chDel); return; }
+      const cp = e.target.closest('[data-ch-copy]');
+      if (cp) {
+        const c = state.captureChannels.find(x => x.id === cp.dataset.chCopy);
+        if (c) {
+          const payload = JSON.stringify({ channel: c.slug, lead: { nome: '', telefone: '', email: '' } }, null, 2);
+          if (navigator.clipboard) navigator.clipboard.writeText(payload);
+          toast('Payload de exemplo copiado', 'success');
+        }
+      }
+    });
+
     // Chat events
     bindChatEvents();
 
@@ -4904,6 +5197,19 @@
     });
     // Delegação de cliques na lista de tarefas (linhas são re-renderizadas)
     $('tasks-list').addEventListener('click', e => {
+      const subToggle = e.target.closest('[data-task-subs]');
+      if (subToggle) {
+        const id = subToggle.dataset.taskSubs;
+        state.expandedTasks[id] = !state.expandedTasks[id];
+        renderTasks();
+        return;
+      }
+      const subChk = e.target.closest('[data-subtask-toggle]');
+      if (subChk) {
+        const [tid, idx] = subChk.dataset.subtaskToggle.split(':');
+        toggleSubtaskDone(tid, Number(idx));
+        return;
+      }
       const toggle = e.target.closest('[data-task-toggle]');
       if (toggle) { toggleTaskDone(toggle.dataset.taskToggle); return; }
       const del = e.target.closest('[data-task-del]');
@@ -5028,6 +5334,8 @@
       if (state.editingProposal) deleteProposal(state.editingProposal.id);
     });
     $('propostas-list').addEventListener('click', e => {
+      const view = e.target.closest('[data-prop-view]');
+      if (view) { window.open(proposalLink(view.dataset.propView), '_blank'); return; }
       const open = e.target.closest('[data-prop-open]');
       if (open) { openProposalModal(open.dataset.propOpen); return; }
       const del = e.target.closest('[data-prop-del]');
