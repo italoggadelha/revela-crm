@@ -34,6 +34,7 @@
     currentView: 'dashboard',
     searchTerm: '',
     filters: { vendor: '', revenue: '', period: '' },
+    dashFilter: { period: '', vendor: '', source: '' },
     currentLead: null,
     editingLead: null,
     sortables: [],
@@ -41,6 +42,7 @@
     // Tarefas
     tasks: [],
     editingTask: null,
+    editingSubtasks: [],
     taskFilter: 'pending',
     // Playbook
     playbookTab: '',
@@ -60,9 +62,14 @@
     automations: [],
     editingAutomation: null,
     autoSelected: 'reminders',
+    auto2Tab: 'custom',
+    schedMedia: null,
     // Propostas
     proposals: [],
     editingProposal: null,
+    // Contato manual
+    editingContact: null,
+    contactProfileText: '',
     // Chat
     conversations: [],
     messages: {},                 // { conversationId: [msgs] }
@@ -82,6 +89,10 @@
     direct:              { label: 'Direct (DM)',          icon: '💬', bg: '#DCFCE7' },
     instagram_organico:  { label: 'Instagram orgânico',   icon: '📱', bg: '#FDF2F8' },
     facebook_organico:   { label: 'Facebook orgânico',    icon: '👥', bg: '#DBEAFE' },
+    indicacao:           { label: 'Indicação',            icon: '🤝', bg: '#DCFCE7' },
+    evento:              { label: 'Evento / networking',  icon: '🎤', bg: '#FEF3C7' },
+    ligacao:             { label: 'Ligação',              icon: '📞', bg: '#E0E7FF' },
+    whatsapp:            { label: 'WhatsApp',             icon: '💚', bg: '#DCFCE7' },
     direto:              { label: 'Acesso direto',        icon: '🌐', bg: '#F5F5F2' },
     outro:               { label: 'Outro / sem origem',   icon: '❓', bg: '#F5F5F2' }
   };
@@ -150,50 +161,131 @@
     return calcTemperature(lead.faturamento, lead.nota_geral);
   }
 
-  // ─── Lead Scoring (0–100) ───
-  // Pontua o lead por capacidade de investir, momento do diagnóstico,
-  // origem e disponibilidade de contato. Transparente: mostra o detalhe.
+  // ─── Lead Scoring COMPORTAMENTAL (0–100) ───
+  // Metodologia moderna de CRM: o score reflete o COMPORTAMENTO REAL do lead
+  // (avanço no funil, engajamento na conversa, reuniões, recência) somado ao
+  // fit de perfil. Leads orgânicos e indicações pesam MAIS que tráfego pago —
+  // tráfego frio ainda precisa ser aquecido. Recalculado em tempo real.
+  function leadSignals(lead) {
+    const convs = (state.conversations || []).filter(c =>
+      c.lead_id === lead.id || (c.leads && c.leads.id === lead.id));
+    let replied = false, lastActivity = 0;
+    convs.forEach(c => {
+      if (c.last_inbound_at) replied = true;
+      const t = c.last_message_at ? new Date(c.last_message_at).getTime() : 0;
+      if (t > lastActivity) lastActivity = t;
+    });
+    let inbound = 0, outbound = 0;
+    convs.forEach(c => (state.messages[c.id] || []).forEach(m => {
+      if (m.direction === 'in') { inbound++; replied = true; } else outbound++;
+    }));
+    const appts = (state.appointments || []).filter(a => a.lead_id === lead.id);
+    const followups = (state.tasks || []).filter(t => t.lead_id === lead.id);
+    const lastTouch = Math.max(
+      lastActivity,
+      lead.ultima_atualizacao ? new Date(lead.ultima_atualizacao).getTime() : 0,
+      lead.created_at ? new Date(lead.created_at).getTime() : 0
+    );
+    return { threads: convs.length, replied, inbound, outbound,
+      appts: appts.length, followups: followups.length, lastTouch };
+  }
+
+  // Pontuação por etapa do funil (avanço comportamental real)
+  function stageScorePts(lead) {
+    const map = { lead_criado: 6, agendou: 17, call_realizada: 23,
+      no_show: 9, negociando: 27, vendida: 30, perdida: 2 };
+    if (map[lead.pipeline_status] != null) return map[lead.pipeline_status];
+    const idx = state.pipeline.findIndex(s => s.id === lead.pipeline_status);
+    if (idx < 0) return 6;
+    return Math.round(6 + (idx / Math.max(1, state.pipeline.length - 1)) * 22);
+  }
+
   function leadScoreParts(lead) {
+    // 1) Avanço no funil — comportamento real de progresso (max 30)
+    const funnelPts = stageScorePts(lead);
+    // 2) Engajamento na conversa (max 22)
+    const sig = leadSignals(lead);
+    let engPts = 0;
+    if (sig.threads > 0) engPts += 6;
+    if (sig.replied) engPts += 10;
+    engPts = Math.min(22, engPts + Math.min(6, sig.inbound * 2));
+    // 3) Fit de perfil — capacidade de investir + clareza da dor (max 22)
     const fatMap = {
-      'Até R$ 5 mil/mês': 12,
-      'R$ 5 a R$ 15 mil/mês': 35,
-      'R$ 15 a R$ 30 mil/mês': 40,
-      'R$ 30 a R$ 50 mil/mês': 32,
-      'Acima de R$ 50 mil/mês': 26
+      'Até R$ 5 mil/mês': 7, 'R$ 5 a R$ 15 mil/mês': 13,
+      'R$ 15 a R$ 30 mil/mês': 14, 'R$ 30 a R$ 50 mil/mês': 12,
+      'Acima de R$ 50 mil/mês': 10
     };
-    const fatPts = fatMap[lead.faturamento] || 12;
     const n = lead.nota_geral;
-    const momPts = n == null ? 18 : n < 1.5 ? 22 : n < 3.5 ? 35 : n < 4.5 ? 18 : 8;
+    const momPts = n == null ? 4 : n < 1.5 ? 5 : n < 3.5 ? 8 : n < 4.5 ? 5 : 3;
+    const fitPts = Math.min(22, (fatMap[lead.faturamento] || 6) + momPts);
+    // 4) Origem — orgânico e indicação valem MAIS que tráfego pago (max 12)
     const srcMap = {
-      trafego_pago: 15, bio_link: 11, direct: 11, stories: 10,
-      instagram_organico: 9, facebook_organico: 9, direto: 6, outro: 5
+      indicacao: 12, instagram_organico: 11, facebook_organico: 11,
+      direct: 10, stories: 9, bio_link: 9, direto: 8,
+      trafego_pago: 6, outro: 5
     };
     const srcPts = srcMap[lead.source_type] || 6;
-    const contatoPts = phoneDigits(lead.telefone) ? 10 : 0;
-    return {
-      parts: [
-        { label: 'Capacidade de investir', pts: fatPts, max: 40 },
-        { label: 'Momento do diagnóstico', pts: momPts, max: 35 },
-        { label: 'Origem do lead', pts: srcPts, max: 15 },
-        { label: 'Contato disponível', pts: contatoPts, max: 10 }
-      ],
-      total: Math.min(100, fatPts + momPts + srcPts + contatoPts)
-    };
+    // 5) Reuniões / calls (max 8)
+    let callPts = Math.min(8, sig.appts * 5);
+    if (['call_realizada', 'negociando', 'vendida'].includes(lead.pipeline_status))
+      callPts = Math.max(callPts, 6);
+    // 6) Recência — não sumiu (max 6)
+    let recPts = 3;
+    if (sig.lastTouch) {
+      const days = (Date.now() - sig.lastTouch) / 86400000;
+      recPts = days < 2 ? 6 : days < 7 ? 4 : days < 15 ? 2 : days < 30 ? 1 : 0;
+    }
+    if (sig.followups > 0) recPts = Math.min(6, recPts + 1);
+
+    const parts = [
+      { label: 'Avanço no funil', pts: funnelPts, max: 30, hint: 'O quanto o lead progrediu no pipeline' },
+      { label: 'Engajamento', pts: engPts, max: 22, hint: 'Conversa iniciada, respostas e troca de mensagens' },
+      { label: 'Fit de perfil', pts: fitPts, max: 22, hint: 'Capacidade de investir + clareza da dor' },
+      { label: 'Origem do lead', pts: srcPts, max: 12, hint: 'Orgânico e indicação valem mais que tráfego pago' },
+      { label: 'Reuniões / calls', pts: callPts, max: 8, hint: 'Calls agendadas e realizadas' },
+      { label: 'Recência', pts: recPts, max: 6, hint: 'Interação recente — o lead não sumiu' }
+    ];
+    let total = parts.reduce((s, p) => s + p.pts, 0);
+    if (lead.pipeline_status === 'perdida') total = Math.min(total, 18);
+    return { parts, total: Math.max(0, Math.min(100, Math.round(total))) };
   }
   function leadScore(lead) { return leadScoreParts(lead).total; }
+
+  // Gradiente laranja — quanto maior o score, mais intenso
+  function scoreColor(score) {
+    if (score >= 81) return '#C2410C';
+    if (score >= 51) return '#EA580C';
+    if (score >= 21) return '#F97316';
+    return '#FDBA74';
+  }
+  // Ícones de fogo — só para leads muito quentes
+  function flameCount(score) {
+    return score >= 95 ? 3 : score >= 85 ? 2 : score >= 70 ? 1 : 0;
+  }
+  function scoreFlames(score) {
+    const n = flameCount(score);
+    if (!n) return '';
+    let h = '<span class="score-flames" title="Lead muito quente">';
+    for (let i = 0; i < n; i++)
+      h += '<svg class="score-flame" viewBox="0 0 24 24"><use href="#i-flame"/></svg>';
+    return h + '</span>';
+  }
   function scoreInfo(lead) {
     const score = leadScore(lead);
-    if (score >= 80) return { score, label: 'Prioridade', color: '#16A34A' };
-    if (score >= 65) return { score, label: 'Quente', color: '#65A30D' };
-    if (score >= 45) return { score, label: 'Morno', color: '#D97706' };
-    return { score, label: 'Frio', color: '#DC2626' };
+    let label;
+    if (score >= 85) label = 'Prioridade';
+    else if (score >= 65) label = 'Quente';
+    else if (score >= 45) label = 'Morno';
+    else label = 'Frio';
+    return { score, label, color: scoreColor(score), flames: scoreFlames(score) };
   }
   // Selo compacto (card / lista)
   function scoreBadge(lead) {
     const inf = scoreInfo(lead);
-    return `<div class="score-badge" style="--sc:${inf.color}" title="Lead score: ${inf.score}/100">
+    return `<div class="score-badge" style="--sc:${inf.color}" title="Lead score: ${inf.score}/100 — ${inf.label}">
       <span class="score-badge-num">${inf.score}</span>
       <span class="score-badge-lb">${inf.label}</span>
+      ${inf.flames}
     </div>`;
   }
   // Medidor completo com detalhamento (modal / relatório)
@@ -206,9 +298,10 @@
           <span class="score-ring-num">${total}</span>
           <span class="score-ring-lb">${inf.label}</span>
         </div>
+        ${inf.flames}
       </div>
       <div class="score-bars">
-        ${parts.map(p => `<div class="score-bar-row">
+        ${parts.map(p => `<div class="score-bar-row" title="${escapeHtml(p.hint || '')}">
           <span class="score-bar-lb">${p.label}</span>
           <span class="score-bar-track"><span style="width:${Math.round(p.pts / p.max * 100)}%;background:${inf.color}"></span></span>
           <span class="score-bar-val">${p.pts}<i>/${p.max}</i></span>
@@ -609,7 +702,7 @@
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'automations' }, async () => {
         await loadAutomations();
-        if (state.currentView === 'automacoes') renderAutoList();
+        if (state.currentView === 'automacoes' && state.auto2Tab === 'custom') renderAutoTable();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'proposals' }, async () => {
         await loadProposals();
@@ -940,12 +1033,14 @@
   // ─── CONTATOS ───
   function renderContacts() {
     const tbody = $('contacts-tbody');
+    const cnt = $('contacts-count');
+    if (cnt) cnt.textContent = `${state.filtered.length} ${state.filtered.length === 1 ? 'contato' : 'contatos'}`;
     if (state.filtered.length === 0) {
       tbody.innerHTML = `
-        <tr><td colspan="9">
+        <tr><td colspan="8">
           <div class="empty-state">
             <div class="empty-state-title">Nenhum contato encontrado</div>
-            <div class="empty-state-text">Ajuste os filtros ou aguarde novos leads chegarem.</div>
+            <div class="empty-state-text">Ajuste os filtros ou cadastre um contato manualmente em "Novo contato".</div>
           </div>
         </td></tr>`;
       return;
@@ -955,25 +1050,25 @@
       const av = avatarUrl(l.instagram, l.nome);
       const assigned = l.assigned_to ? profileById(l.assigned_to) : null;
       const fname = firstName(l.nome);
+      const isClient = l.pipeline_status === 'vendida';
       return `
-        <tr data-lead-id="${l.id}">
+        <tr data-lead-id="${l.id}" class="${isClient ? 'contact-client' : ''}">
           <td>
             <div class="contact-name-cell">
               <div class="contact-avatar">
                 ${av ? `<img src="${av}" alt="" onerror="this.parentElement.textContent='${initials(l.nome)}'">` : initials(l.nome)}
               </div>
               <div>
-                <div class="contact-name-text">${escapeHtml(l.nome || '—')}</div>
-                <div class="contact-handle">${escapeHtml(l.instagram || '')}</div>
+                <div class="contact-name-text">${escapeHtml(l.nome || '—')}${isClient ? '<span class="contact-client-tag">Cliente</span>' : ''}</div>
+                <div class="contact-handle">${escapeHtml(l.instagram || l.empresa || l.email || '')}</div>
               </div>
             </div>
           </td>
           <td><a href="${whatsappLink(l.telefone, fname)}" target="_blank" style="color:var(--accent)">${escapeHtml(l.telefone || '—')}</a></td>
           <td>${escapeHtml(l.faturamento || '—')}</td>
-          <td>${escapeHtml(l.momento || '—')}</td>
-          <td style="font-variant-numeric:tabular-nums">${l.nota_geral != null ? Number(l.nota_geral).toFixed(1).replace('.', ',') : '—'}</td>
+          <td>${scoreBadge(l)}</td>
           <td><span class="chip" style="background:${stage.color}33; color:#1A1A18">${escapeHtml(stage.label)}</span></td>
-          <td>${assigned ? escapeHtml(assigned.nome || assigned.email.split('@')[0]) : '<span style="color:var(--text-faded)">—</span>'}</td>
+          <td>${assigned ? escapeHtml(profileName(assigned)) : '<span style="color:var(--text-faded)">—</span>'}</td>
           <td style="color:var(--text-muted)">${relativeTime(l.created_at)}</td>
           <td>
             <div class="row-actions" style="justify-content:flex-end">
@@ -993,7 +1088,7 @@
         const id = btn.closest('tr').dataset.leadId;
         const action = btn.dataset.action;
         if (action === 'view') openLeadModal(id);
-        if (action === 'edit') openEditModal(id);
+        if (action === 'edit') openContactModal(id);
         if (action === 'delete') deleteLead(id);
       });
     });
@@ -1008,19 +1103,65 @@
   }
 
   // ─── MÉTRICAS ───
+  // ─── DASHBOARD: escopo filtrado + helpers de moeda ───
+  function dashLeads() {
+    let r = state.leads.slice();
+    const df = state.dashFilter;
+    if (df.vendor === 'unassigned') r = r.filter(l => !l.assigned_to);
+    else if (df.vendor) r = r.filter(l => l.assigned_to === df.vendor);
+    if (df.source) r = r.filter(l => (l.source_type || 'outro') === df.source);
+    if (df.period) {
+      const days = { today: 1, week: 7, month: 30, quarter: 90 }[df.period];
+      if (days) {
+        const cut = Date.now() - days * 86400000;
+        r = r.filter(l => new Date(l.created_at).getTime() > cut);
+      }
+    }
+    return r;
+  }
+  function brl(n) {
+    return Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  }
+  function brlShort(n) {
+    n = Number(n || 0);
+    if (n >= 1000000) return 'R$ ' + (n / 1000000).toFixed(1).replace('.', ',') + 'M';
+    if (n >= 1000) return 'R$ ' + (n / 1000).toFixed(1).replace('.', ',') + 'k';
+    return brl(n);
+  }
+  function updateDashFilterUI() {
+    const vsel = $('dash-vendor');
+    if (vsel) {
+      vsel.innerHTML = '<option value="">Todos vendedores</option>' +
+        '<option value="unassigned">Não atribuídos</option>' +
+        state.profiles.map(p => `<option value="${p.id}">${escapeHtml(profileName(p))}</option>`).join('');
+      vsel.value = state.dashFilter.vendor;
+    }
+    const ssel = $('dash-source');
+    if (ssel) {
+      const srcs = [...new Set(state.leads.map(l => l.source_type || 'outro'))];
+      ssel.innerHTML = '<option value="">Todas as origens</option>' +
+        srcs.map(s => `<option value="${s}">${escapeHtml(sourceMeta(s).label)}</option>`).join('');
+      ssel.value = state.dashFilter.source;
+    }
+    const psel = $('dash-period');
+    if (psel) psel.value = state.dashFilter.period;
+  }
+
   function renderMetrics() {
-    const total = state.leads.length;
-    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    const prevWeekAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
-    const wk = state.leads.filter(l => new Date(l.created_at).getTime() > weekAgo).length;
-    const prevWk = state.leads.filter(l => {
+    updateDashFilterUI();
+    const leads = dashLeads();
+    const total = leads.length;
+    const weekAgo = Date.now() - 7 * 86400000;
+    const prevWeekAgo = Date.now() - 14 * 86400000;
+    const wk = leads.filter(l => new Date(l.created_at).getTime() > weekAgo).length;
+    const prevWk = leads.filter(l => {
       const t = new Date(l.created_at).getTime();
       return t > prevWeekAgo && t <= weekAgo;
     }).length;
-    const sold = state.leads.filter(l => l.pipeline_status === 'vendida').length;
+    const sold = leads.filter(l => l.pipeline_status === 'vendida').length;
     const conv = total > 0 ? Math.round((sold / total) * 100) : 0;
-    const hot = state.leads.filter(l => leadScore(l) >= 65).length;
-    const unassigned = state.leads.filter(l => !l.assigned_to).length;
+    const hot = leads.filter(l => leadScore(l) >= 65).length;
+    const unassigned = leads.filter(l => !l.assigned_to).length;
 
     $('m-total').textContent = total;
     $('m-week').textContent = wk;
@@ -1029,27 +1170,127 @@
     if ($('m-hot')) $('m-hot').textContent = hot;
     if ($('m-unassigned')) $('m-unassigned').textContent = unassigned;
 
-    // Delta da semana
     const delta = wk - prevWk;
     const deltaEl = $('m-week-delta');
     if (prevWk === 0 && wk === 0) {
       deltaEl.textContent = '';
       deltaEl.className = 'metric-delta flat';
     } else if (delta > 0) {
-      deltaEl.innerHTML = `<svg width="11" height="11"><use href="#i-arrow-up"/></svg> +${delta} vs semana anterior`;
+      deltaEl.innerHTML = `<svg width="11" height="11"><use href="#i-arrow-up"/></svg> +${delta} vs. semana anterior`;
       deltaEl.className = 'metric-delta up';
     } else if (delta < 0) {
-      deltaEl.innerHTML = `<svg width="11" height="11"><use href="#i-arrow-down"/></svg> ${delta} vs semana anterior`;
+      deltaEl.innerHTML = `<svg width="11" height="11"><use href="#i-arrow-down"/></svg> ${delta} vs. semana anterior`;
       deltaEl.className = 'metric-delta down';
     } else {
-      deltaEl.textContent = '= vs semana anterior';
+      deltaEl.textContent = '= vs. semana anterior';
       deltaEl.className = 'metric-delta flat';
     }
 
+    renderKpiGrid(leads);
     renderFunnel();
     renderTimelineChart();
     renderLeaderboard();
+    renderSourcePerf(leads);
     renderRevenueChart();
+  }
+
+  // KPIs comerciais avançados — performance da operação
+  function renderKpiGrid(leads) {
+    const el = $('kpi-grid');
+    if (!el) return;
+    const ids = leads.map(l => l.id);
+    const inSet = id => ids.includes(id);
+    const isLost = l => state.pipeline.some(s => s.id === l.pipeline_status && isLossStage(s));
+    const closedWon = leads.filter(l => l.pipeline_status === 'vendida');
+    const closedLost = leads.filter(isLost);
+    const open = leads.filter(l => l.pipeline_status !== 'vendida' && !isLost(l));
+    const stalled = open.filter(l => {
+      const sig = leadSignals(l);
+      return sig.lastTouch && (Date.now() - sig.lastTouch) > 7 * 86400000;
+    });
+    const reachedStage = key => leads.filter(l => {
+      const o = state.pipeline.find(s => s.id === l.pipeline_status);
+      const target = state.pipeline.find(s => s.id === key);
+      return o && target && o.order >= target.order && !isLost(l);
+    }).length;
+    const agendou = reachedStage('agendou');
+    const realizou = reachedStage('call_realizada');
+    const attendRate = agendou > 0 ? Math.round(realizou / agendou * 100) : 0;
+    const negoc = leads.filter(l => l.pipeline_status === 'negociando').length;
+    const closeRate = realizou > 0 ? Math.round(closedWon.length / realizou * 100) : 0;
+    const revenue = closedWon.reduce((s, l) => s + (Number(l.valor) || 0), 0);
+    const ticket = closedWon.length > 0 ? revenue / closedWon.length : 0;
+    const forecast = leads.filter(l => l.pipeline_status === 'negociando')
+      .reduce((s, l) => s + (Number(l.valor) || 0), 0);
+    const convs = state.conversations.filter(c => inSet(c.lead_id));
+    const replied = convs.filter(c => c.last_inbound_at).length;
+    const respRate = convs.length > 0 ? Math.round(replied / convs.length * 100) : 0;
+    const waiting = convs.filter(c => c.last_message_direction === 'in' && (c.unread_count || 0) > 0).length;
+    const fus = state.tasks.filter(t => t.lead_id && inSet(t.lead_id));
+    const fuDone = fus.filter(t => t.done).length;
+    const fuPend = fus.filter(t => !t.done).length;
+    const scoreAvg = leads.length ? Math.round(leads.reduce((s, l) => s + leadScore(l), 0) / leads.length) : 0;
+
+    const kpis = [
+      { ic: '🌱', lb: 'Leads novos (7d)', v: leads.filter(l => new Date(l.created_at).getTime() > weekAgoMs()).length },
+      { ic: '🔄', lb: 'Em andamento', v: open.length },
+      { ic: '🏆', lb: 'Ganhos', v: closedWon.length, tone: 'good' },
+      { ic: '💔', lb: 'Perdidos', v: closedLost.length, tone: 'bad' },
+      { ic: '🧊', lb: 'Parados (+7d)', v: stalled.length, tone: stalled.length ? 'warn' : '' },
+      { ic: '📅', lb: 'Calls agendadas', v: agendou },
+      { ic: '✅', lb: 'Calls realizadas', v: realizou },
+      { ic: '🚪', lb: 'Comparecimento', v: attendRate + '%' },
+      { ic: '🤝', lb: 'Em negociação', v: negoc },
+      { ic: '🎯', lb: 'Taxa de fechamento', v: closeRate + '%', tone: 'good' },
+      { ic: '💰', lb: 'Receita gerada', v: brlShort(revenue), tone: 'good' },
+      { ic: '🧾', lb: 'Ticket médio', v: brlShort(ticket) },
+      { ic: '📈', lb: 'Receita prevista', v: brlShort(forecast), sub: 'em negociação' },
+      { ic: '💬', lb: 'Conversas ativas', v: convs.length },
+      { ic: '↩️', lb: 'Taxa de resposta', v: respRate + '%' },
+      { ic: '⏳', lb: 'Aguardando retorno', v: waiting, tone: waiting ? 'warn' : '' },
+      { ic: '📋', lb: 'Follow-ups pendentes', v: fuPend, tone: fuPend ? 'warn' : '' },
+      { ic: '☑️', lb: 'Follow-ups feitos', v: fuDone },
+      { ic: '🔥', lb: 'Lead score médio', v: scoreAvg + '/100' },
+      { ic: '🎟️', lb: 'Conversão geral', v: (total => total > 0 ? Math.round(closedWon.length / total * 100) : 0)(leads.length) + '%' }
+    ];
+    el.innerHTML = kpis.map(k => `
+      <div class="kpi-card ${k.tone ? 'kpi-' + k.tone : ''}">
+        <span class="kpi-ic">${k.ic}</span>
+        <div class="kpi-body">
+          <div class="kpi-val">${k.v}</div>
+          <div class="kpi-lb">${k.lb}</div>
+          ${k.sub ? `<div class="kpi-sub">${k.sub}</div>` : ''}
+        </div>
+      </div>`).join('');
+  }
+  function weekAgoMs() { return Date.now() - 7 * 86400000; }
+
+  // Origem dos leads — conversão por canal
+  function renderSourcePerf(leads) {
+    const el = $('source-perf');
+    if (!el) return;
+    const groups = {};
+    leads.forEach(l => {
+      const k = l.source_type || 'outro';
+      (groups[k] = groups[k] || []).push(l);
+    });
+    const rows = Object.entries(groups).map(([k, arr]) => {
+      const won = arr.filter(l => l.pipeline_status === 'vendida').length;
+      return { k, meta: sourceMeta(k), total: arr.length, won,
+        conv: arr.length ? Math.round(won / arr.length * 100) : 0 };
+    }).sort((a, b) => b.conv - a.conv || b.total - a.total);
+    if (!rows.length) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-state-text">Sem dados de origem ainda.</div></div>';
+      return;
+    }
+    const maxConv = Math.max(1, ...rows.map(r => r.conv));
+    el.innerHTML = rows.map((r, i) => `
+      <div class="srcperf-row${i === 0 && r.won > 0 ? ' srcperf-best' : ''}">
+        <span class="srcperf-ic">${r.meta.icon}</span>
+        <span class="srcperf-name">${escapeHtml(r.meta.label)}${i === 0 && r.won > 0 ? ' <b>★ melhor</b>' : ''}</span>
+        <span class="srcperf-bar"><span style="width:${r.conv / maxConv * 100}%"></span></span>
+        <span class="srcperf-val">${r.conv}%<i>${r.won}/${r.total}</i></span>
+      </div>`).join('');
   }
 
   function renderLeaderboard() {
@@ -1058,14 +1299,18 @@
 
     // Stats por vendedor — inclui todos que atuam como vendedor (is_seller),
     // mesmo sem nenhuma venda; ordena pelo desempenho.
+    const scoped = dashLeads();
     const stats = state.profiles
       .filter(p => p.is_seller !== false)
       .map(p => {
-        const leads = state.leads.filter(l => l.assigned_to === p.id);
-        const vendas = leads.filter(l => l.pipeline_status === 'vendida').length;
+        const leads = scoped.filter(l => l.assigned_to === p.id);
+        const won = leads.filter(l => l.pipeline_status === 'vendida');
+        const vendas = won.length;
         const total = leads.length;
         const conv = total > 0 ? Math.round((vendas / total) * 100) : 0;
-        return { profile: p, total, vendas, conv, score: vendas * 10 + total + conv * 0.1 };
+        const receita = won.reduce((s, l) => s + (Number(l.valor) || 0), 0);
+        return { profile: p, total, vendas, conv, receita,
+          score: vendas * 10 + total + conv * 0.1 + receita / 1000 };
       })
       .sort((a, b) => b.score - a.score);
 
@@ -1106,32 +1351,75 @@
               <div class="leader-stat-num" style="color:var(--accent)">${s.conv}%</div>
               <div class="leader-stat-label">Conversão</div>
             </div>
+            <div class="leader-stat">
+              <div class="leader-stat-num" style="color:#C2410C">${brlShort(s.receita)}</div>
+              <div class="leader-stat-label">Receita</div>
+            </div>
           </div>
         </div>
       `;
     }).join('');
   }
 
+  // Etapa de "perda" (não conta como avanço no funil)
+  function isLossStage(s) {
+    return /perd|no.?show|lost/i.test((s.id || '') + ' ' + (s.label || ''));
+  }
+  // Funil visual REAL — formato de funil que estreita conforme a conversão cai.
+  // Cada etapa mostra: quantidade, % do topo, taxa de avanço, taxa de perda.
   function renderFunnel() {
     const f = $('funnel');
-    const counts = state.pipeline.map(s => ({
-      stage: s,
-      count: state.leads.filter(l => l.pipeline_status === s.id).length
-    }));
-    const max = Math.max(1, ...counts.map(c => c.count));
+    if (!f) return;
+    const leads = dashLeads();
+    const fstages = state.pipeline.filter(s => !isLossStage(s));
+    const orderOf = id => {
+      const s = state.pipeline.find(x => x.id === id);
+      return s ? s.order : -1;
+    };
+    const isFunnelId = id => fstages.some(s => s.id === id);
+    // Contagem cumulativa: leads cujo estágio atual está nesta etapa ou além
+    const reached = fstages.map(st => leads.filter(l =>
+      isFunnelId(l.pipeline_status) && orderOf(l.pipeline_status) >= st.order).length);
+    const top = Math.max(1, reached[0] || 0);
+    const lost = leads.filter(l =>
+      state.pipeline.some(s => s.id === l.pipeline_status && isLossStage(s))).length;
+    const endConv = Math.round((reached[reached.length - 1] || 0) / top * 100);
 
-    f.innerHTML = counts.map(({ stage, count }) => `
-      <div class="funnel-row">
-        <div class="funnel-label">
-          <span class="funnel-label-dot" style="background:${stage.color}"></span>
-          ${escapeHtml(stage.label)}
-        </div>
-        <div class="funnel-bar-wrap">
-          <div class="funnel-bar" style="width:${(count / max) * 100}%;background:${stage.color}"></div>
-          <span class="funnel-count">${count}</span>
-        </div>
-      </div>
-    `).join('');
+    if (!fstages.length) { f.innerHTML = ''; return; }
+
+    const rows = fstages.map((st, i) => {
+      const count = reached[i];
+      const pctTop = Math.round(count / top * 100);
+      const next = reached[i + 1];
+      const advance = (i < fstages.length - 1 && count > 0) ? Math.round(next / count * 100) : null;
+      const loss = advance != null ? 100 - advance : null;
+      const width = Math.max(15, Math.round(count / top * 100));
+      return `
+        <div class="vfunnel-step">
+          <div class="vfunnel-shapecol">
+            <div class="vfunnel-shape" style="width:${width}%;--c:${st.color}">
+              <span class="vfunnel-count">${count}</span>
+              <span class="vfunnel-stname">${escapeHtml(st.label)}</span>
+            </div>
+            ${advance != null ? `<div class="vfunnel-drop">
+              <span class="vfunnel-drop-adv"><svg viewBox="0 0 24 24"><use href="#i-arrow-down"/></svg> ${advance}% avançaram</span>
+              ${loss > 0 ? `<span class="vfunnel-drop-loss">${loss}% pararam aqui</span>` : ''}
+            </div>` : ''}
+          </div>
+          <div class="vfunnel-info">
+            <div class="vfunnel-kpi"><b>${pctTop}%</b><span>do topo</span></div>
+            <div class="vfunnel-kpi"><b>${advance != null ? advance + '%' : '—'}</b><span>taxa de avanço</span></div>
+            <div class="vfunnel-kpi vfunnel-kpi-loss"><b>${loss != null ? loss + '%' : '—'}</b><span>taxa de perda</span></div>
+            <div class="vfunnel-kpi"><b>${count}</b><span>acumulado</span></div>
+          </div>
+        </div>`;
+    }).join('');
+
+    f.innerHTML = `<div class="vfunnel">${rows}</div>
+      <div class="vfunnel-foot">
+        <span class="vfunnel-foot-leak"><svg viewBox="0 0 24 24"><use href="#i-flame"/></svg> ${lost} ${lost === 1 ? 'lead perdido' : 'leads perdidos'} (no-show / perdidas)</span>
+        <span class="vfunnel-foot-conv">Conversão geral topo → fim: <b>${endConv}%</b></span>
+      </div>`;
   }
 
   function renderTimelineChart() {
@@ -1140,12 +1428,13 @@
 
     // Agrupa leads por dia (últimos 30 dias)
     const days = 30;
+    const tlLeads = dashLeads();
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const labels = [], data = [];
     for (let i = days - 1; i >= 0; i--) {
       const d = new Date(today); d.setDate(d.getDate() - i);
       const next = new Date(d); next.setDate(next.getDate() + 1);
-      const count = state.leads.filter(l => {
+      const count = tlLeads.filter(l => {
         const t = new Date(l.created_at).getTime();
         return t >= d.getTime() && t < next.getTime();
       }).length;
@@ -1192,7 +1481,8 @@
       'R$ 30 a R$ 50 mil/mês',
       'Acima de R$ 50 mil/mês'
     ];
-    const data = buckets.map(b => state.leads.filter(l => l.faturamento === b).length);
+    const rcLeads = dashLeads();
+    const data = buckets.map(b => rcLeads.filter(l => l.faturamento === b).length);
 
     state.charts.revenue = new Chart(ctx, {
       type: 'bar',
@@ -1497,6 +1787,18 @@
            <img src="${profileAvatar(resp)}" alt="">
            ${escapeHtml(profileName(resp))}</span>`
       : '';
+    const lead = t.lead_id ? state.leads.find(l => l.id === t.lead_id) : null;
+    const leadChip = lead
+      ? `<span class="task-lead-chip" data-task-lead="${lead.id}" title="Abrir lead ${escapeHtml(lead.nome || '')}">👤 ${escapeHtml(firstName(lead.nome) || 'Lead')}</span>`
+      : '';
+    const subs = Array.isArray(t.subtasks) ? t.subtasks : [];
+    const subDone = subs.filter(s => s.done).length;
+    const subBar = subs.length
+      ? `<div class="task-sub-prog" title="${subDone}/${subs.length} subtarefas concluídas">
+           <span class="task-sub-bar"><span style="width:${Math.round(subDone / subs.length * 100)}%"></span></span>
+           <span class="task-sub-count">${subDone}/${subs.length} subtarefas</span>
+         </div>`
+      : '';
     return `
       <div class="task-row ${t.done ? 'done' : ''}" data-task-id="${t.id}">
         <button class="task-check ${t.done ? 'checked' : ''}" data-task-toggle="${t.id}"
@@ -1509,7 +1811,9 @@
             ${escapeHtml(t.title)}
           </div>
           ${t.description ? `<div class="task-row-desc">${escapeHtml(t.description)}</div>` : ''}
+          ${subBar}
         </div>
+        ${leadChip}
         ${respChip}
         ${dueLabel ? `<span class="task-due ${overdue ? 'overdue' : ''} ${dueToday ? 'today' : ''}">
           <svg><use href="#i-calendar"/></svg>${dueLabel}</span>` : ''}
@@ -1517,6 +1821,40 @@
           <svg><use href="#i-trash"/></svg>
         </button>
       </div>`;
+  }
+
+  // ─── Editor de subtarefas ───
+  function subGenId() { return 's' + Math.random().toString(36).slice(2, 8); }
+  function renderSubtaskEditor() {
+    const el = $('subtask-list');
+    if (!el) return;
+    if (!state.editingSubtasks.length) {
+      el.innerHTML = '<div class="subtask-empty">Nenhuma subtarefa — quebre a tarefa em passos menores.</div>';
+      return;
+    }
+    el.innerHTML = state.editingSubtasks.map(s => `
+      <div class="subtask-row" data-sub-id="${s.id}">
+        <button type="button" class="subtask-check ${s.done ? 'checked' : ''}" data-sub-toggle="${s.id}">
+          <svg><use href="#i-check"/></svg>
+        </button>
+        <input type="text" class="input-text subtask-title" data-sub-title="${s.id}" value="${escapeHtml(s.title || '')}" placeholder="O que precisa ser feito">
+        <select class="input-text subtask-assignee" data-sub-assignee="${s.id}">
+          <option value="">Responsável</option>
+          ${state.profiles.map(p => `<option value="${p.id}" ${p.id === s.assignee ? 'selected' : ''}>${escapeHtml(firstName(p.nome) || profileName(p))}</option>`).join('')}
+        </select>
+        <input type="date" class="input-text subtask-due" data-sub-due="${s.id}" value="${s.due || ''}">
+        <button type="button" class="subtask-del" data-sub-del="${s.id}" title="Remover">✕</button>
+      </div>`).join('');
+  }
+  // Lê os campos do editor de volta para o state
+  function syncSubtaskEditor() {
+    $$('#subtask-list .subtask-row').forEach(row => {
+      const s = state.editingSubtasks.find(x => x.id === row.dataset.subId);
+      if (!s) return;
+      const ti = row.querySelector('[data-sub-title]'); if (ti) s.title = ti.value;
+      const as = row.querySelector('[data-sub-assignee]'); if (as) s.assignee = as.value || null;
+      const du = row.querySelector('[data-sub-due]'); if (du) s.due = du.value || null;
+    });
   }
 
   function renderTasks() {
@@ -1565,6 +1903,17 @@
       `<option value="${p.id}">${escapeHtml(profileName(p))}</option>`).join('');
     sel.value = t ? t.vendedor_id : state.user.id;
     sel.disabled = !adminUser;
+    // Lead vinculado
+    const leadSel = $('task-lead');
+    leadSel.innerHTML = '<option value="">— Nenhum —</option>' +
+      state.leads.map(l => `<option value="${l.id}">${escapeHtml(l.nome || 'Lead')}</option>`).join('');
+    leadSel.value = t ? (t.lead_id || '') : '';
+    // Subtarefas
+    state.editingSubtasks = (t && Array.isArray(t.subtasks) ? t.subtasks : []).map(s => ({
+      id: s.id || subGenId(), title: s.title || '', done: !!s.done,
+      assignee: s.assignee || null, due: s.due || null
+    }));
+    renderSubtaskEditor();
     $('task-delete').style.display = t ? '' : 'none';
     $('task-modal-backdrop').classList.add('show');
     setTimeout(() => $('task-title').focus(), 60);
@@ -1575,6 +1924,7 @@
     if (!title) { toast('Dê um título à tarefa', 'error'); return; }
     const done = $('task-done').checked;
     const editing = state.editingTask;
+    syncSubtaskEditor();
     const patch = {
       title,
       due_date: $('task-due').value || null,
@@ -1585,7 +1935,9 @@
       completed_at: done
         ? ((editing && editing.done && editing.completed_at) ? editing.completed_at : new Date().toISOString())
         : null,
-      vendedor_id: $('task-assignee').value || state.user.id
+      vendedor_id: $('task-assignee').value || state.user.id,
+      lead_id: $('task-lead').value || null,
+      subtasks: state.editingSubtasks.filter(s => (s.title || '').trim())
     };
     const btn = $('task-save');
     btn.disabled = true;
@@ -1804,9 +2156,59 @@
     if (wrap) wrap.setAttribute('data-aview', state.agendaView);
     $$('#agenda-views .agenda-view-btn').forEach(b =>
       b.classList.toggle('active', b.dataset.aview === state.agendaView));
+    renderAgendaGStatus();
     renderAgendaHeader();
     renderAgendaGrid();
     renderAgendaDay();
+  }
+
+  function renderAgendaGStatus() {
+    const el = $('agenda-gstatus');
+    if (!el) return;
+    const gs = state.googleStatus || {};
+    if (gs.connected) {
+      el.className = 'agenda-gstatus connected';
+      el.innerHTML = `<span class="agenda-gdot"></span> Google Calendar conectado`;
+      el.title = 'Sincronizando com ' + (gs.email || 'sua conta Google');
+    } else {
+      el.className = 'agenda-gstatus';
+      el.innerHTML = `<span class="agenda-gdot"></span> Google Calendar não conectado`;
+      el.title = 'Conecte sua conta em Configurações → Google / Agenda';
+    }
+  }
+
+  // Importa eventos do Google Calendar para a Agenda (sincronização bidirecional)
+  async function importGoogleEvents() {
+    if (!state.googleStatus.connected) {
+      toast('Conecte uma conta Google em Configurações → Google / Agenda', 'error');
+      switchView('settings');
+      showSettingsSection('google');
+      return;
+    }
+    const btn = $('btn-agenda-sync');
+    if (btn) { btn.disabled = true; }
+    try {
+      const r = await callGoogleFn({ action: 'import-events' });
+      if (r.error) { toast('Erro ao sincronizar: ' + r.error, 'error'); return; }
+      const events = r.events || [];
+      const known = new Set(state.appointments.map(a => a.google_event_id).filter(Boolean));
+      const novos = events.filter(e => e.google_event_id && !known.has(e.google_event_id));
+      if (!novos.length) { toast('Agenda já está sincronizada — nada novo no Google', 'success'); return; }
+      const rows = novos.map(e => ({
+        vendedor_id: state.user.id,
+        title: e.title, starts_at: e.starts_at, ends_at: e.ends_at,
+        location: e.location, notes: e.notes, google_event_id: e.google_event_id
+      }));
+      const { error } = await supabase.from('appointments').insert(rows);
+      if (error) { toast('Erro ao importar: ' + error.message, 'error'); return; }
+      await loadAppointments();
+      renderAgenda();
+      toast(`${novos.length} evento(s) importado(s) do Google Calendar`, 'success');
+    } catch (e) {
+      toast('Erro ao sincronizar: ' + e.message, 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   }
 
   function renderAgendaHeader() {
@@ -2039,7 +2441,8 @@
         <span class="schedmsg-st schedmsg-st-${m.status}">${stLabel[m.status] || m.status}</span>
         <div class="schedmsg-main">
           <div class="schedmsg-lead">${escapeHtml(lead ? (lead.nome || 'Lead') : '(lead removido)')}</div>
-          <div class="schedmsg-body">${escapeHtml(m.body)}</div>
+          <div class="schedmsg-body">${escapeHtml(m.body || '')}</div>
+          ${m.media_url ? `<div class="schedmsg-media">${mediaLabel({ type: m.media_type, name: { audio: 'Áudio', image: 'Imagem', file: 'Arquivo', link: m.media_url }[m.media_type] || 'Mídia' })}</div>` : ''}
           ${m.error ? `<div class="schedmsg-err">⚠ ${escapeHtml(m.error)}</div>` : ''}
         </div>
         <span class="schedmsg-when">${fmtSchedWhen(m.send_at)}</span>
@@ -2056,46 +2459,145 @@
     state.automations = data || [];
   }
 
-  function renderAutomacoes() {
-    if (!state.autoSelected) state.autoSelected = 'reminders';
-    renderAutoList();
-    showAutoPanel(state.autoSelected);
+  // ─── Mídia: gravação de áudio, imagem, arquivo e link ───
+  let _rec = { recorder: null, chunks: [], stream: null };
+  function fileToDataURL(file, cb) {
+    const r = new FileReader();
+    r.onload = e => cb(e.target.result);
+    r.readAsDataURL(file);
   }
-
-  function renderAutoList() {
-    const el = $('auto-list-items');
-    if (!el) return;
-    let html = `
-      <button class="auto-item ${state.autoSelected === 'reminders' ? 'active' : ''}" data-auto="reminders">
-        <span class="auto-item-ic">🔔</span><span>Lembretes de reunião</span></button>
-      <button class="auto-item ${state.autoSelected === 'scheduled' ? 'active' : ''}" data-auto="scheduled">
-        <span class="auto-item-ic">📨</span><span>Mensagens agendadas</span></button>
-      <div class="auto-list-sep">Personalizadas</div>`;
-    if (!state.automations.length) {
-      html += `<div class="auto-list-empty">Nenhuma automação criada.</div>`;
-    } else {
-      html += state.automations.map(a => `
-        <button class="auto-item ${state.autoSelected === a.id ? 'active' : ''}" data-auto="${a.id}">
-          <span class="auto-item-ic">${a.active ? '⚡' : '○'}</span>
-          <span>${escapeHtml(a.name)}</span></button>`).join('');
+  function pickMediaFile(accept, kind, cb) {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = accept;
+    inp.onchange = () => {
+      const f = inp.files[0];
+      if (!f) return;
+      if (f.size > 12 * 1024 * 1024) { toast('Arquivo muito grande (máx. 12 MB)', 'error'); return; }
+      fileToDataURL(f, url => cb({ type: kind, url, name: f.name }));
+    };
+    inp.click();
+  }
+  function isRecording() { return _rec.recorder && _rec.recorder.state === 'recording'; }
+  async function toggleAudioRecording(onDone, onState) {
+    if (isRecording()) { _rec.recorder.stop(); return; }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
+      toast('Gravação de áudio não suportada neste navegador', 'error'); return;
     }
-    el.innerHTML = html;
-    el.querySelectorAll('.auto-item').forEach(b => {
-      b.addEventListener('click', () => showAutoPanel(b.dataset.auto));
-    });
+    try {
+      _rec.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      _rec.chunks = [];
+      _rec.recorder = new MediaRecorder(_rec.stream);
+      _rec.recorder.ondataavailable = e => { if (e.data && e.data.size) _rec.chunks.push(e.data); };
+      _rec.recorder.onstop = () => {
+        _rec.stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(_rec.chunks, { type: 'audio/webm' });
+        fileToDataURL(blob, url => onDone({ type: 'audio', url, name: 'Áudio gravado' }));
+        if (onState) onState(false);
+      };
+      _rec.recorder.start();
+      if (onState) onState(true);
+      toast('🎙️ Gravando — clique de novo para parar', 'success');
+    } catch (e) {
+      toast('Não foi possível acessar o microfone', 'error');
+    }
+  }
+  function mediaLabel(m) {
+    if (!m) return '';
+    const ic = { audio: '🎤', image: '🖼️', file: '📎', link: '🔗' }[m.type] || '📎';
+    return `${ic} ${escapeHtml(m.name || m.url || m.type)}`;
   }
 
-  function showAutoPanel(sel) {
-    state.autoSelected = sel;
-    $$('#auto-list-items .auto-item').forEach(b =>
-      b.classList.toggle('active', b.dataset.auto === String(sel)));
-    const isBuiltin = sel === 'reminders' || sel === 'scheduled';
-    $('auto-reminders').style.display = sel === 'reminders' ? '' : 'none';
-    $('auto-scheduled').style.display = sel === 'scheduled' ? '' : 'none';
-    $('autopanel-builder').style.display = isBuiltin ? 'none' : '';
-    if (sel === 'reminders') loadAutomationSettings();
-    else if (sel === 'scheduled') renderSchedMsgList();
-    else renderAutomationBuilder(sel);
+  // Tipos de automação
+  const AUTO_KINDS = [
+    { id: 'automacao', label: 'Automação', ic: '⚡' },
+    { id: 'boasvindas', label: 'Boas-vindas', ic: '👋' },
+    { id: 'followup', label: 'Follow-up', ic: '📲' },
+    { id: 'nutricao', label: 'Nutrição', ic: '🌱' },
+    { id: 'reativacao', label: 'Reativação', ic: '♻️' },
+    { id: 'posvenda', label: 'Pós-venda', ic: '🎁' },
+    { id: 'cobranca', label: 'Cobrança', ic: '💳' },
+    { id: 'lembrete', label: 'Lembrete', ic: '🔔' }
+  ];
+  function autoKindMeta(k) { return AUTO_KINDS.find(x => x.id === k) || AUTO_KINDS[0]; }
+
+  function renderAutomacoes() {
+    if (!state.auto2Tab) state.auto2Tab = 'custom';
+    showAuto2Tab(state.auto2Tab);
+  }
+  function showAuto2Tab(tab) {
+    state.auto2Tab = tab;
+    $$('#auto2-tabs .auto2-tab').forEach(b => b.classList.toggle('active', b.dataset.atab === tab));
+    $('auto2-custom').style.display = tab === 'custom' ? '' : 'none';
+    $('auto-reminders').style.display = tab === 'reminders' ? '' : 'none';
+    $('auto-scheduled').style.display = tab === 'scheduled' ? '' : 'none';
+    if (tab === 'custom') renderAutoTable();
+    else if (tab === 'reminders') loadAutomationSettings();
+    else if (tab === 'scheduled') renderSchedMsgList();
+  }
+
+  // Tabela organizada de automações
+  function renderAutoTable() {
+    const tb = $('auto-table-body');
+    if (!tb) return;
+    if (!state.automations.length) {
+      tb.innerHTML = `<tr><td colspan="8"><div class="empty-state">
+        <div class="empty-state-title">Nenhuma automação criada</div>
+        <div class="empty-state-text">Clique em "Nova automação" para montar seu primeiro fluxo.</div>
+      </div></td></tr>`;
+      return;
+    }
+    const trigLabels = {
+      pipeline_enter: 'Entra numa etapa', message_received: 'Recebe mensagem',
+      keyword_reply: 'Palavra-chave', schedule: 'Em um horário'
+    };
+    tb.innerHTML = state.automations.map(a => {
+      const km = autoKindMeta(a.kind);
+      const creator = a.created_by ? profileById(a.created_by) : null;
+      return `<tr data-auto-row="${a.id}">
+        <td><div class="auto-row-name">${escapeHtml(a.name || 'Sem nome')}</div>
+          <div class="auto-row-sub">${(a.steps || []).length} bloco(s)</div></td>
+        <td><span class="auto-kind-chip">${km.ic} ${escapeHtml(km.label)}</span></td>
+        <td>${trigLabels[a.trigger_type] || '—'}</td>
+        <td><button class="auto-toggle ${a.active ? 'on' : 'off'}" data-auto-toggle="${a.id}" title="${a.active ? 'Ativa — clique para pausar' : 'Pausada — clique para ativar'}"><span class="auto-toggle-knob"></span></button></td>
+        <td style="font-variant-numeric:tabular-nums">${a.run_count || 0}</td>
+        <td>${creator ? escapeHtml(profileName(creator)) : '—'}</td>
+        <td style="color:var(--text-muted)">${a.created_at ? relativeTime(a.created_at) : '—'}</td>
+        <td>
+          <div class="row-actions" style="justify-content:flex-end">
+            <button class="row-action" data-auto-edit="${a.id}" title="Editar"><svg><use href="#i-edit"/></svg></button>
+            <button class="row-action" data-auto-dup="${a.id}" title="Duplicar"><svg><use href="#i-report"/></svg></button>
+            <button class="row-action danger" data-auto-del="${a.id}" title="Excluir"><svg><use href="#i-trash"/></svg></button>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  async function toggleAutomation(id) {
+    const a = state.automations.find(x => x.id === id);
+    if (!a) return;
+    a.active = !a.active;
+    renderAutoTable();
+    const { error } = await supabase.from('automations').update({ active: a.active }).eq('id', id);
+    if (error) { a.active = !a.active; renderAutoTable(); toast('Erro: ' + error.message, 'error'); }
+    else toast(a.active ? 'Automação ativada' : 'Automação pausada', 'success');
+  }
+  async function duplicateAutomation(id) {
+    const a = state.automations.find(x => x.id === id);
+    if (!a) return;
+    const { error } = await supabase.from('automations').insert({
+      name: (a.name || 'Automação') + ' (cópia)', kind: a.kind || 'automacao',
+      trigger_type: a.trigger_type, trigger_config: a.trigger_config,
+      steps: a.steps, edges: a.edges, active: false, created_by: state.user.id
+    });
+    if (error) { toast('Erro: ' + error.message, 'error'); return; }
+    await loadAutomations();
+    renderAutoTable();
+    toast('Automação duplicada', 'success');
+  }
+  function openAutomationBuilder(id) {
+    $('auto-builder-backdrop').classList.add('show');
+    renderAutomationBuilder(id || 'new');
   }
 
   function renderAutoTriggerConfig(type, cfg) {
@@ -2190,7 +2692,7 @@
         id: s.id || flowGenId(), type: s.type,
         x: s.x != null ? s.x : 60, y: s.y != null ? s.y : 210 + i * 160,
         text: s.text, template: s.template, minutes: s.minutes,
-        tag: s.tag, stage: s.stage, url: s.url
+        tag: s.tag, stage: s.stage, url: s.url, media: s.media || null
       });
     });
     let edges = Array.isArray(a.edges) && a.edges.length ? a.edges.map(e => ({ ...e })) : [];
@@ -2239,7 +2741,16 @@
         </select><div class="flow-tc">${flowTriggerConfigHTML(node.trigger_type, node.trigger_config || {})}</div>`;
     } else if (node.type === 'message') {
       body = `<textarea class="flow-f-text" rows="2" placeholder="Mensagem... use {nome}">${escapeHtml(node.text || '')}</textarea>
-        <input class="flow-f-tpl input-text" placeholder="Template (fora da janela 24h)" value="${escapeHtml(node.template || '')}">`;
+        <input class="flow-f-tpl input-text" placeholder="Template (fora da janela 24h)" value="${escapeHtml(node.template || '')}">
+        <div class="flow-media">
+          <div class="flow-media-bar">
+            <button type="button" class="flow-media-btn" data-mb="audio" title="Gravar áudio">🎤</button>
+            <button type="button" class="flow-media-btn" data-mb="image" title="Anexar imagem">🖼️</button>
+            <button type="button" class="flow-media-btn" data-mb="file" title="Anexar arquivo">📎</button>
+            <button type="button" class="flow-media-btn" data-mb="link" title="Adicionar link">🔗</button>
+          </div>
+          <div class="flow-media-preview"></div>
+        </div>`;
     } else if (node.type === 'wait') {
       body = `<input type="number" class="flow-f-min input-text" value="${node.minutes || 60}" min="1">
         <span class="flow-unit">minutos</span>`;
@@ -2267,6 +2778,33 @@
     }
     if (node.type === 'pipeline' && node.stage) {
       const ss = div.querySelector('.flow-f-stage'); if (ss) ss.value = node.stage;
+    }
+    if (node.type === 'message') {
+      const prev = div.querySelector('.flow-media-preview');
+      const renderPrev = () => {
+        prev.innerHTML = node.media
+          ? `<span class="flow-media-chip">${mediaLabel(node.media)}<button type="button" class="flow-media-x">✕</button></span>`
+          : '';
+        const x = prev.querySelector('.flow-media-x');
+        if (x) x.addEventListener('click', () => { node.media = null; renderPrev(); });
+      };
+      renderPrev();
+      div.querySelectorAll('.flow-media-btn').forEach(b => {
+        b.addEventListener('click', () => {
+          const k = b.dataset.mb;
+          if (k === 'audio') {
+            toggleAudioRecording(m => { node.media = m; renderPrev(); },
+              rec => b.classList.toggle('recording', rec));
+          } else if (k === 'image') {
+            pickMediaFile('image/*', 'image', m => { node.media = m; renderPrev(); });
+          } else if (k === 'file') {
+            pickMediaFile('*/*', 'file', m => { node.media = m; renderPrev(); });
+          } else if (k === 'link') {
+            const u = prompt('Cole o link a enviar:');
+            if (u && u.trim()) { node.media = { type: 'link', url: u.trim(), name: u.trim() }; renderPrev(); }
+          }
+        });
+      });
     }
     div.querySelector('.flow-node-hd').addEventListener('mousedown', e => {
       if (e.target.closest('.flow-node-del')) return;
@@ -2334,22 +2872,24 @@
     }
     state.editingAutomation = a;
     flowInit(a);
+    $('auto-builder-title').textContent = a.id === 'new' ? 'Nova automação' : 'Editar automação';
     const builder = $('autopanel-builder');
     builder.innerHTML = `
-      <div class="settings-section-head">
-        <div>
-          <div class="settings-title">${a.id === 'new' ? 'Nova automação' : 'Editar automação'}</div>
-          <div class="settings-desc">Adicione blocos, arraste pelo cabeçalho para posicionar e ligue-os pela bolinha inferior (⬤). Clique numa linha para removê-la.</div>
+      <div class="auto-builder-form">
+        <div class="field-block">
+          <label class="field-block-label">Nome da automação</label>
+          <input type="text" class="input-text" id="auto-name" placeholder="Ex: Boas-vindas ao novo lead">
         </div>
-        <button class="btn-primary" id="auto-save"><svg><use href="#i-check"/></svg> Salvar</button>
+        <div class="field-block">
+          <label class="field-block-label">Tipo</label>
+          <select class="input-text" id="auto-kind">
+            ${AUTO_KINDS.map(k => `<option value="${k.id}">${k.ic} ${escapeHtml(k.label)}</option>`).join('')}
+          </select>
+        </div>
+        <label class="perm-check auto-builder-active">
+          <input type="checkbox" id="auto-active"><span>Automação ativa</span>
+        </label>
       </div>
-      <div class="field-block">
-        <label class="field-block-label">Nome da automação</label>
-        <input type="text" class="input-text" id="auto-name" placeholder="Ex: Boas-vindas ao novo lead">
-      </div>
-      <label class="perm-check" style="display:inline-flex;width:auto;margin:4px 0 10px">
-        <input type="checkbox" id="auto-active"><span>Automação ativa</span>
-      </label>
       <div class="flow-palette">
         <span class="flow-palette-lb">Adicionar bloco:</span>
         <button class="flow-add-btn" type="button" data-add="message">💬 Mensagem</button>
@@ -2357,15 +2897,19 @@
         <button class="flow-add-btn" type="button" data-add="tag">🏷️ Tag</button>
         <button class="flow-add-btn" type="button" data-add="pipeline">📊 Pipeline</button>
         <button class="flow-add-btn" type="button" data-add="webhook">🔗 Webhook</button>
+        <div class="flow-palette-actions">
+          ${a.id !== 'new'
+            ? '<button class="modal-btn modal-btn-danger" id="auto-delete" type="button"><svg><use href="#i-trash"/></svg>Excluir</button>'
+            : ''}
+          <button class="btn-primary" id="auto-save" type="button"><svg><use href="#i-check"/></svg> Salvar automação</button>
+        </div>
       </div>
       <div class="flow-canvas-wrap">
         <div class="flow-canvas" id="flow-canvas"><svg class="flow-edges" id="flow-edges"></svg></div>
       </div>
-      ${a.id !== 'new'
-        ? '<button class="modal-btn modal-btn-danger" id="auto-delete" style="margin-top:10px"><svg><use href="#i-trash"/></svg>Excluir automação</button>'
-        : ''}
     `;
     $('auto-name').value = a.name || '';
+    $('auto-kind').value = a.kind || 'automacao';
     $('auto-active').checked = !!a.active;
     renderFlow();
     $$('.flow-add-btn').forEach(b => b.addEventListener('click', () => flowAddNode(b.dataset.add)));
@@ -2397,6 +2941,8 @@
       if (type === 'message') {
         node.text = el.querySelector('.flow-f-text').value;
         node.template = el.querySelector('.flow-f-tpl').value.trim();
+        const fn = state.flow.nodes.find(n => n.id === id);
+        if (fn && fn.media) node.media = fn.media;
       } else if (type === 'wait') {
         node.minutes = Number(el.querySelector('.flow-f-min').value) || 0;
       } else if (type === 'tag') {
@@ -2409,36 +2955,35 @@
       steps.push(node);
     });
     const payload = {
-      name, trigger_type: triggerType, trigger_config: triggerConfig,
+      name, kind: $('auto-kind').value || 'automacao',
+      trigger_type: triggerType, trigger_config: triggerConfig,
       steps, edges: state.flow.edges, active: $('auto-active').checked
     };
     const btn = $('auto-save');
     btn.disabled = true;
-    let error, saved;
+    let error;
     if (a.id === 'new') {
       payload.created_by = state.user.id;
-      ({ data: saved, error } = await supabase.from('automations').insert(payload).select().single());
+      ({ error } = await supabase.from('automations').insert(payload));
     } else {
-      ({ data: saved, error } = await supabase.from('automations').update(payload).eq('id', a.id).select().single());
+      ({ error } = await supabase.from('automations').update(payload).eq('id', a.id));
     }
     btn.disabled = false;
     if (error) { toast('Erro: ' + error.message, 'error'); return; }
     await loadAutomations();
-    state.autoSelected = saved.id;
-    renderAutoList();
-    showAutoPanel(saved.id);
+    $('auto-builder-backdrop').classList.remove('show');
+    renderAutoTable();
     toast('Automação salva', 'success');
   }
 
   async function deleteAutomation(id) {
-    if (id === 'new') { showAutoPanel('reminders'); renderAutoList(); return; }
+    if (id === 'new') { $('auto-builder-backdrop').classList.remove('show'); return; }
     if (!confirm('Excluir esta automação?')) return;
     const { error } = await supabase.from('automations').delete().eq('id', id);
     if (error) { toast('Erro: ' + error.message, 'error'); return; }
     state.automations = state.automations.filter(x => x.id !== id);
-    state.autoSelected = 'reminders';
-    renderAutoList();
-    showAutoPanel('reminders');
+    $('auto-builder-backdrop').classList.remove('show');
+    renderAutoTable();
     toast('Automação excluída', 'success');
   }
 
@@ -2452,7 +2997,18 @@
     $('schedmsg-date').value = ymd(new Date());
     $('schedmsg-time').value = '09:00';
     $('schedmsg-body').value = '';
+    state.schedMedia = null;
+    renderSchedMediaPreview();
     $('schedmsg-modal-backdrop').classList.add('show');
+  }
+  function renderSchedMediaPreview() {
+    const el = $('sm-media-preview');
+    if (!el) return;
+    el.innerHTML = state.schedMedia
+      ? `<span class="flow-media-chip">${mediaLabel(state.schedMedia)}<button type="button" class="flow-media-x" id="sm-media-clear">✕</button></span>`
+      : '';
+    const x = $('sm-media-clear');
+    if (x) x.addEventListener('click', () => { state.schedMedia = null; renderSchedMediaPreview(); });
   }
 
   async function saveSchedMsg() {
@@ -2462,12 +3018,14 @@
     const body = $('schedmsg-body').value.trim();
     if (!leadId) { toast('Selecione um lead', 'error'); return; }
     if (!date || !time) { toast('Preencha data e hora', 'error'); return; }
-    if (!body) { toast('Escreva a mensagem', 'error'); return; }
+    if (!body && !state.schedMedia) { toast('Escreva uma mensagem ou anexe uma mídia', 'error'); return; }
     const send_at = new Date(`${date}T${time}`).toISOString();
     const btn = $('schedmsg-save');
     btn.disabled = true;
     const { error } = await supabase.from('scheduled_messages').insert({
-      vendedor_id: state.user.id, lead_id: leadId, body, send_at
+      vendedor_id: state.user.id, lead_id: leadId, body, send_at,
+      media_url: state.schedMedia ? state.schedMedia.url : null,
+      media_type: state.schedMedia ? state.schedMedia.type : null
     });
     btn.disabled = false;
     if (error) { toast('Erro: ' + error.message, 'error'); return; }
@@ -3624,11 +4182,10 @@
     $('modal-backdrop').classList.add('show');
   }
 
-  // ─── Link de agendamento (lead marca a própria reunião) ───
+  // ─── Link de agendamento (lead/cliente marca a própria reunião) ───
   function openBookingLink(lead) {
-    if (!lead) return;
-    const vendedor = lead.assigned_to || state.user.id;
-    const url = location.origin + '/agendar.html?v=' + vendedor + '&lead=' + lead.id;
+    const vendedor = (lead && lead.assigned_to) || state.user.id;
+    const url = location.origin + '/agendar.html?v=' + vendedor + (lead ? '&lead=' + lead.id : '');
     $('booklink-url').value = url;
     $('booklink-open').href = url;
     $('booklink-modal-backdrop').classList.add('show');
@@ -3693,53 +4250,137 @@
     </div>`;
   }
 
-  function openReportModal(lead) {
+  // Relatório 360° — visão completa do lead
+  async function openReportModal(lead) {
     if (!lead) return;
-    $('report-modal-sub').textContent =
-      (lead.nome || 'Lead') + (lead.instagram ? ' · ' + lead.instagram : '');
+    $('report-modal-backdrop').classList.add('show');
+    $('report-body').innerHTML = '<div class="report-doc"><div class="empty-state"><div class="empty-state-text">Carregando relatório…</div></div></div>';
+    if (state.leadHistory[lead.id] === undefined) {
+      try { await loadLeadHistory(lead.id); } catch (_) { state.leadHistory[lead.id] = []; }
+    }
+    const history = state.leadHistory[lead.id] || [];
     const tops = topsToList(lead);
     const nota = lead.nota_geral != null
       ? Number(lead.nota_geral).toFixed(2).replace('.', ',') : '—';
     const origem = lead.source_type
       ? (sourceMeta(lead.source_type).icon + ' ' + sourceMeta(lead.source_type).label)
       : (lead.origem || '—');
+    const stage = findStage(lead.pipeline_status);
+    const vendedor = lead.assigned_to ? profileById(lead.assigned_to) : null;
+    const sig = leadSignals(lead);
+    const inf = scoreInfo(lead);
+    const appts = (state.appointments || []).filter(a => a.lead_id === lead.id)
+      .sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at));
+    const fus = (state.tasks || []).filter(t => t.lead_id === lead.id)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    const tags = Array.isArray(lead.tags) ? lead.tags : [];
+
+    $('report-modal-sub').textContent =
+      (lead.nome || 'Lead') + (lead.instagram ? ' · ' + lead.instagram : '');
+
+    const comm = [
+      ['Valor do negócio', lead.valor != null ? brl(lead.valor) : null],
+      ['Prioridade', lead.prioridade],
+      ['Empresa', lead.empresa],
+      ['Cargo', lead.cargo],
+      ['Cidade', lead.cidade],
+      ['E-mail', lead.email],
+      ['Produto de interesse', lead.produto],
+      ['Interesse declarado', lead.interesse]
+    ].filter(r => r[1]);
+
+    const daysSince = sig.lastTouch ? Math.floor((Date.now() - sig.lastTouch) / 86400000) : null;
+    const behavior = [
+      ['Conversas iniciadas', sig.threads],
+      ['Respondeu ao contato', sig.replied ? 'Sim' : 'Ainda não'],
+      ['Reuniões agendadas', sig.appts],
+      ['Follow-ups registrados', sig.followups],
+      ['Última interação', daysSince == null ? '—' : daysSince === 0 ? 'Hoje' : daysSince + ' dia(s) atrás']
+    ];
+
+    const events = [];
+    events.push({ t: new Date(lead.created_at).getTime(), ic: '🌱',
+      txt: 'Lead criado' + (lead.source_type ? ' via ' + escapeHtml(sourceMeta(lead.source_type).label) : '') });
+    history.forEach(h => events.push({ t: new Date(h.alterado_em).getTime(), ic: '🔄',
+      txt: 'Movido para <strong>' + escapeHtml(findStage(h.status_novo).label) + '</strong>' }));
+    appts.forEach(a => events.push({ t: new Date(a.starts_at).getTime(), ic: '📅',
+      txt: 'Reunião: <strong>' + escapeHtml(a.title) + '</strong>' }));
+    fus.forEach(t => events.push({ t: new Date(t.created_at).getTime(), ic: t.done ? '☑️' : '📋',
+      txt: (t.done ? 'Follow-up concluído: ' : 'Follow-up criado: ') + '<strong>' + escapeHtml(t.title) + '</strong>' }));
+    events.sort((a, b) => b.t - a.t);
+
+    const sec = (title, body) => `<div class="report-section"><h4>${title}</h4>${body}</div>`;
+    const kvGrid = rows => `<div class="report-kv">${rows.map(r =>
+      `<div class="report-kv-row"><span>${escapeHtml(r[0])}</span><strong>${escapeHtml(String(r[1]))}</strong></div>`).join('')}</div>`;
+    const isLost = lead.pipeline_status === 'perdida';
+
     $('report-body').innerHTML = `
       <div class="report-doc">
         <div class="report-hd">
           <div class="report-avatar"><img src="${avatarUrl(null, lead.nome)}" alt=""></div>
           <div class="report-hd-info">
             <h3>${escapeHtml(lead.nome || '—')}</h3>
-            <div class="report-hd-meta">${escapeHtml(lead.instagram || '')}${lead.telefone ? ' · ' + escapeHtml(lead.telefone) : ''}</div>
+            <div class="report-hd-meta">${escapeHtml(lead.instagram || '')}${lead.telefone ? ' · ' + escapeHtml(lead.telefone) : ''}${lead.email ? ' · ' + escapeHtml(lead.email) : ''}</div>
             <div class="report-hd-meta">Diagnóstico em ${formatDate(lead.created_at)}</div>
           </div>
+          <div class="report-hd-score" style="--sc:${inf.color}">
+            <div class="report-hd-score-num">${inf.score}</div>
+            <div class="report-hd-score-lb">${inf.label}</div>
+          </div>
         </div>
+
         <div class="report-stats">
+          <div class="report-stat"><span>Etapa atual</span><strong>${escapeHtml(stage.label)}</strong></div>
           <div class="report-stat"><span>Faturamento</span><strong>${escapeHtml(lead.faturamento || '—')}</strong></div>
           <div class="report-stat"><span>Momento</span><strong>${escapeHtml(lead.momento || '—')}</strong></div>
           <div class="report-stat"><span>Nota geral</span><strong>${nota} / 5</strong></div>
+          <div class="report-stat"><span>Vendedor</span><strong>${vendedor ? escapeHtml(profileName(vendedor)) : '—'}</strong></div>
         </div>
-        <div class="report-section">
-          <h4>Lead Score</h4>
-          ${scoreGauge(lead)}
-        </div>
-        <div class="report-section">
-          <h4>Análise do lead</h4>
-          ${buildLeadAnalysis(lead).map(p => `<p>${p}</p>`).join('')}
-        </div>
-        <div class="report-section">
-          <h4>3 pontos mais críticos</h4>
-          ${tops.length
-            ? '<div class="report-tops">' + tops.map((t, i) =>
-                `<div class="report-top"><span>0${i + 1}</span>${escapeHtml(t)}</div>`).join('') + '</div>'
-            : '<p style="color:var(--text-faded)">Sem pontos críticos identificados.</p>'}
-        </div>
+
+        ${tags.length ? sec('Tags', '<div class="report-tags">' + tags.map(t =>
+          `<span class="report-tag">${escapeHtml(t)}</span>`).join('') + '</div>') : ''}
+
+        ${sec('Lead Score detalhado', scoreGauge(lead))}
+        ${sec('Análise comercial do lead', buildLeadAnalysis(lead).map(p => `<p>${p}</p>`).join(''))}
+        ${sec('Perfil comportamental', kvGrid(behavior))}
+        ${comm.length ? sec('Informações comerciais', kvGrid(comm)) : ''}
+
+        ${sec('Objetivos, dores e pontos críticos', tops.length
+          ? '<div class="report-tops">' + tops.map((t, i) =>
+              `<div class="report-top"><span>0${i + 1}</span>${escapeHtml(t)}</div>`).join('') + '</div>'
+          : '<p style="color:var(--text-faded)">Sem pontos críticos identificados no diagnóstico.</p>')}
+
         ${reportDiagnostic(lead)}
-        <div class="report-section">
-          <h4>Origem</h4>
-          <p>${escapeHtml(origem)}</p>
-        </div>
+
+        ${sec('Histórico da pipeline', history.length
+          ? '<div class="report-timeline">' + history.map(h =>
+              `<div class="report-tl-item"><span class="report-tl-ic">🔄</span><div><div class="report-tl-txt">Movido para <strong>${escapeHtml(findStage(h.status_novo).label)}</strong></div><div class="report-tl-meta">${formatDate(h.alterado_em)}${h.alterado_por_email ? ' · ' + escapeHtml(h.alterado_por_email) : ''}</div></div></div>`).join('') + '</div>'
+          : '<p style="color:var(--text-faded)">Sem movimentações registradas ainda.</p>')}
+
+        ${sec('Reuniões e calls', appts.length
+          ? '<div class="report-list">' + appts.map(a =>
+              `<div class="report-li"><span>📅</span><div><strong>${escapeHtml(a.title)}</strong><div class="report-tl-meta">${formatDate(a.starts_at)}${a.location ? ' · ' + escapeHtml(a.location) : ''}</div></div></div>`).join('') + '</div>'
+          : '<p style="color:var(--text-faded)">Nenhuma reunião agendada com este lead.</p>')}
+
+        ${sec('Follow-ups e tarefas', fus.length
+          ? '<div class="report-list">' + fus.map(t =>
+              `<div class="report-li"><span>${t.done ? '☑️' : '📋'}</span><div><strong>${escapeHtml(t.title)}</strong><div class="report-tl-meta">${t.done ? 'Concluída' : 'Pendente'}${t.due_date ? ' · vence ' + formatTaskDate(t.due_date) : ''}</div></div></div>`).join('') + '</div>'
+          : '<p style="color:var(--text-faded)">Nenhum follow-up registrado.</p>')}
+
+        ${sec('Timeline completa', events.length
+          ? '<div class="report-timeline">' + events.map(e =>
+              `<div class="report-tl-item"><span class="report-tl-ic">${e.ic}</span><div><div class="report-tl-txt">${e.txt}</div><div class="report-tl-meta">${formatDate(new Date(e.t).toISOString())}</div></div></div>`).join('') + '</div>'
+          : '<p style="color:var(--text-faded)">Sem eventos.</p>')}
+
+        ${(lead.resumo_manual || lead.observacoes) ? sec('Anotações do vendedor',
+          (lead.resumo_manual ? `<p>${escapeHtml(lead.resumo_manual)}</p>` : '') +
+          (lead.observacoes ? `<p>${escapeHtml(lead.observacoes)}</p>` : '')) : ''}
+
+        ${isLost ? sec('Motivo da perda',
+          `<p>${escapeHtml(lead.observacoes || lead.resumo_manual || 'Motivo não registrado — preencha nas observações do lead.')}</p>`) : ''}
+
+        ${sec('Origem do lead', `<p>${escapeHtml(origem)}${lead.source_campaign ? ' · Campanha: ' + escapeHtml(lead.source_campaign) : ''}${lead.source_creative ? ' · Criativo: ' + escapeHtml(lead.source_creative) : ''}</p>`)}
       </div>`;
-    $('report-modal-backdrop').classList.add('show');
   }
 
   function closeAllModals() {
@@ -3753,11 +4394,16 @@
     $('appt-modal-backdrop').classList.remove('show');
     $('schedmsg-modal-backdrop').classList.remove('show');
     $('proposta-modal-backdrop').classList.remove('show');
+    const cm = $('contact-modal-backdrop');
+    if (cm) cm.classList.remove('show');
+    const ab = $('auto-builder-backdrop');
+    if (ab) ab.classList.remove('show');
     state.editingProposal = null;
     state.currentLead = null;
     state.editingLead = null;
     state.editingTask = null;
     state.editingAppointment = null;
+    state.editingContact = null;
   }
 
   // Auto-save de notas
@@ -3798,6 +4444,138 @@
       toast('Lead atualizado', 'success');
       $('edit-modal-backdrop').classList.remove('show');
     }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // MODAL: Contato manual (criar / editar lead completo)
+  // ═══════════════════════════════════════════════════════════════════
+  function openContactModal(id) {
+    const lead = id ? state.leads.find(l => l.id === id) : null;
+    state.editingContact = lead || null;
+    state.contactProfileText = lead ? (lead.resumo_manual || '') : '';
+    $('contact-modal-title').textContent = lead ? 'Editar contato' : 'Novo contato';
+    $('ct-nome').value = lead ? (lead.nome || '') : '';
+    $('ct-telefone').value = lead ? (lead.telefone || '') : '';
+    $('ct-email').value = lead ? (lead.email || '') : '';
+    $('ct-instagram').value = lead ? (lead.instagram || '') : '';
+    $('ct-empresa').value = lead ? (lead.empresa || '') : '';
+    $('ct-cargo').value = lead ? (lead.cargo || '') : '';
+    $('ct-cidade').value = lead ? (lead.cidade || '') : '';
+    $('ct-origem').value = lead ? (lead.source_type || 'whatsapp') : 'whatsapp';
+    $('ct-status').innerHTML = state.pipeline.map(s =>
+      `<option value="${s.id}">${escapeHtml(s.label)}</option>`).join('');
+    $('ct-status').value = lead ? lead.pipeline_status : ((state.pipeline[0] || {}).id || '');
+    $('ct-assigned').innerHTML = '<option value="">Não atribuído</option>' +
+      state.profiles.map(p => `<option value="${p.id}">${escapeHtml(profileName(p))}</option>`).join('');
+    $('ct-assigned').value = lead ? (lead.assigned_to || '') : state.user.id;
+    $('ct-prioridade').value = lead ? (lead.prioridade || 'Média') : 'Média';
+    $('ct-faturamento').value = lead ? (lead.faturamento || '') : '';
+    $('ct-valor').value = lead && lead.valor != null ? lead.valor : '';
+    $('ct-produto').value = lead ? (lead.produto || '') : '';
+    $('ct-interesse').value = lead ? (lead.interesse || '') : '';
+    $('ct-tags').value = lead && Array.isArray(lead.tags) ? lead.tags.join(', ') : '';
+    $('ct-observacoes').value = lead ? (lead.observacoes || '') : '';
+    $('ct-ai-content').innerHTML = state.contactProfileText
+      ? formatContactProfile(state.contactProfileText)
+      : 'Preencha os dados e clique em <strong>"Gerar análise"</strong> — o sistema monta automaticamente o resumo, o perfil do cliente, a intenção, o potencial de compra, possíveis objeções e a recomendação comercial.';
+    $('ct-delete').style.display = lead && isAdmin() ? '' : 'none';
+    $('contact-modal-backdrop').classList.add('show');
+    setTimeout(() => $('ct-nome').focus(), 60);
+  }
+
+  function readContactForm() {
+    const tags = $('ct-tags').value.split(',').map(s => s.trim()).filter(Boolean);
+    let ig = $('ct-instagram').value.trim();
+    if (ig && !ig.startsWith('@')) ig = '@' + ig;
+    const numOrNull = v => (v !== '' && v != null && !isNaN(v)) ? Number(v) : null;
+    return {
+      nome: $('ct-nome').value.trim(),
+      telefone: $('ct-telefone').value.trim() || null,
+      email: $('ct-email').value.trim() || null,
+      instagram: ig || null,
+      empresa: $('ct-empresa').value.trim() || null,
+      cargo: $('ct-cargo').value.trim() || null,
+      cidade: $('ct-cidade').value.trim() || null,
+      source_type: $('ct-origem').value || 'outro',
+      pipeline_status: $('ct-status').value,
+      assigned_to: $('ct-assigned').value || null,
+      prioridade: $('ct-prioridade').value || null,
+      faturamento: $('ct-faturamento').value || null,
+      valor: numOrNull($('ct-valor').value),
+      produto: $('ct-produto').value.trim() || null,
+      interesse: $('ct-interesse').value.trim() || null,
+      tags,
+      observacoes: $('ct-observacoes').value.trim() || null
+    };
+  }
+
+  // Gera análise comercial heurística (sem IA) a partir dos dados do contato
+  function buildContactProfile(d) {
+    const fname = firstName(d.nome) || 'O contato';
+    const organica = ['indicacao', 'instagram_organico', 'facebook_organico', 'direct'].includes(d.source_type);
+    const highBudget = /Acima|R\$ 30|R\$ 15/.test(d.faturamento || '');
+    const prio = (d.prioridade || '').toLowerCase();
+    let resumo = `${fname} é um contato de origem "${sourceMeta(d.source_type).label}"`;
+    if (d.empresa) resumo += `, da empresa ${d.empresa}`;
+    if (d.cargo) resumo += ` (${d.cargo})`;
+    resumo += '.';
+    if (d.faturamento) resumo += ` Faturamento declarado: ${d.faturamento}.`;
+    if (d.cidade) resumo += ` Localizado em ${d.cidade}.`;
+    const lines = [
+      ['Resumo', resumo],
+      ['Perfil do cliente', organica
+        ? 'Lead de canal orgânico/indicação — tende a chegar mais aquecido e com maior confiança na marca.'
+        : d.source_type === 'trafego_pago'
+          ? 'Lead de tráfego pago — ainda frio: precisa de aquecimento e construção de autoridade antes da oferta.'
+          : 'Lead de canal direto — avalie o nível de consciência e a urgência antes de avançar.'],
+      ['Intenção', d.interesse
+        ? `Demonstrou interesse em: ${d.interesse}.`
+        : (d.produto ? `Interesse no produto/serviço: ${d.produto}.` : 'Intenção ainda não detalhada — qualifique na primeira conversa.')],
+      ['Potencial de compra', (highBudget || prio === 'alta')
+        ? 'Alto — bom poder de investimento e/ou prioridade alta. Vale acelerar a abordagem.'
+        : prio === 'baixa'
+          ? 'Baixo no momento — mantenha em nutrição e reavalie em alguns dias.'
+          : 'Médio — qualifique melhor o orçamento e a urgência antes de propor.'],
+      ['Possíveis objeções', (d.faturamento && /Até R\$ 5/.test(d.faturamento))
+        ? 'Preço/orçamento — ancore o valor no retorno (ROI) e ofereça uma porta de entrada acessível.'
+        : !d.interesse
+          ? 'Falta de clareza da necessidade — conduza um diagnóstico antes de oferecer.'
+          : 'Tempo e confiança — reforce provas sociais e cases do nicho de estética/clínicas.'],
+      ['Recomendação comercial', (highBudget || prio === 'alta')
+        ? 'Agende uma call de diagnóstico o quanto antes e prepare uma proposta personalizada.'
+        : 'Faça um follow-up consultivo, envie conteúdo de valor e qualifique o orçamento antes da proposta.']
+    ];
+    return lines.map(([t, b]) => `### ${t}\n${b}`).join('\n\n');
+  }
+  function formatContactProfile(raw) {
+    return String(raw || '').split('\n\n').map(block => {
+      const m = block.match(/^### (.+)\n([\s\S]*)$/);
+      if (m) return `<div class="ct-ai-sec"><b>${escapeHtml(m[1])}</b><span>${escapeHtml(m[2])}</span></div>`;
+      return `<p>${escapeHtml(block)}</p>`;
+    }).join('');
+  }
+
+  async function saveContact() {
+    const form = readContactForm();
+    if (!form.nome) { toast('Informe o nome do contato', 'error'); return; }
+    const editing = state.editingContact;
+    const btn = $('ct-save');
+    btn.disabled = true;
+    let error;
+    if (editing) {
+      ({ error } = await supabase.from('leads')
+        .update({ ...form, atualizado_por: state.user.id }).eq('id', editing.id));
+    } else {
+      form.origem = 'Cadastro manual';
+      form.resumo_manual = state.contactProfileText || buildContactProfile(form);
+      ({ error } = await supabase.from('leads').insert(form));
+    }
+    btn.disabled = false;
+    if (error) { toast('Erro: ' + error.message, 'error'); return; }
+    await loadLeads();
+    closeAllModals();
+    renderAll();
+    toast(editing ? 'Contato atualizado' : 'Contato cadastrado', 'success');
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -3947,8 +4725,21 @@
       state.filters = { vendor: '', revenue: '', period: '' };
       state.searchTerm = '';
       $('search-input').value = '';
-      $$('.filter-select').forEach(s => s.value = '');
+      $('toolbar').querySelectorAll('.filter-select').forEach(s => s.value = '');
       renderAll();
+    });
+
+    // Filtros do Dashboard
+    const dashF = id => { const el = $(id); if (el) el.addEventListener('change', e => {
+      const key = id.replace('dash-', '');
+      state.dashFilter[key] = e.target.value;
+      renderMetrics();
+    }); };
+    dashF('dash-period'); dashF('dash-vendor'); dashF('dash-source');
+    const dfc = $('dash-filter-clear');
+    if (dfc) dfc.addEventListener('click', () => {
+      state.dashFilter = { period: '', vendor: '', source: '' };
+      renderMetrics();
     });
 
     // Modal lead
@@ -3963,6 +4754,25 @@
     $('edit-modal-backdrop').addEventListener('click', e => { if (e.target === $('edit-modal-backdrop')) closeAllModals(); });
     $('edit-cancel').addEventListener('click', closeAllModals);
     $('edit-save').addEventListener('click', saveEdit);
+
+    // Modal de contato manual
+    const btnNewContact = $('btn-new-contact');
+    if (btnNewContact) btnNewContact.addEventListener('click', () => openContactModal(null));
+    $('contact-modal-close').addEventListener('click', closeAllModals);
+    $('ct-cancel').addEventListener('click', closeAllModals);
+    $('contact-modal-backdrop').addEventListener('click', e => {
+      if (e.target === $('contact-modal-backdrop')) closeAllModals();
+    });
+    $('ct-save').addEventListener('click', saveContact);
+    $('ct-delete').addEventListener('click', () => {
+      if (state.editingContact) deleteLead(state.editingContact.id);
+    });
+    $('ct-generate').addEventListener('click', () => {
+      const form = readContactForm();
+      if (!form.nome) { toast('Informe ao menos o nome para gerar a análise', 'error'); return; }
+      state.contactProfileText = buildContactProfile(form);
+      $('ct-ai-content').innerHTML = formatContactProfile(state.contactProfileText);
+    });
 
     // Modal vendor
     $('vendor-modal-close').addEventListener('click', closeAllModals);
@@ -4098,8 +4908,36 @@
       if (toggle) { toggleTaskDone(toggle.dataset.taskToggle); return; }
       const del = e.target.closest('[data-task-del]');
       if (del) { deleteTask(del.dataset.taskDel); return; }
+      const leadChip = e.target.closest('[data-task-lead]');
+      if (leadChip) { e.stopPropagation(); openLeadModal(leadChip.dataset.taskLead); return; }
       const open = e.target.closest('[data-task-open]');
       if (open) { openTaskModal(open.dataset.taskOpen); return; }
+    });
+
+    // Editor de subtarefas no modal de tarefa
+    $('subtask-add').addEventListener('click', () => {
+      syncSubtaskEditor();
+      state.editingSubtasks.push({ id: subGenId(), title: '', done: false, assignee: null, due: null });
+      renderSubtaskEditor();
+      const rows = $$('#subtask-list .subtask-row');
+      const last = rows[rows.length - 1];
+      if (last) last.querySelector('.subtask-title').focus();
+    });
+    $('subtask-list').addEventListener('click', e => {
+      const toggle = e.target.closest('[data-sub-toggle]');
+      if (toggle) {
+        syncSubtaskEditor();
+        const s = state.editingSubtasks.find(x => x.id === toggle.dataset.subToggle);
+        if (s) s.done = !s.done;
+        renderSubtaskEditor();
+        return;
+      }
+      const del = e.target.closest('[data-sub-del]');
+      if (del) {
+        syncSubtaskEditor();
+        state.editingSubtasks = state.editingSubtasks.filter(x => x.id !== del.dataset.subDel);
+        renderSubtaskEditor();
+      }
     });
 
     // Agenda
@@ -4118,6 +4956,22 @@
       renderAgenda();
     });
     $('btn-add-appt').addEventListener('click', () => openAppointmentModal(null));
+    const btnAgSync = $('btn-agenda-sync');
+    if (btnAgSync) btnAgSync.addEventListener('click', importGoogleEvents);
+    const btnAgBook = $('btn-agenda-booklink');
+    if (btnAgBook) btnAgBook.addEventListener('click', () => openBookingLink(null));
+    // Presets de duração no modal de reunião
+    const apptDur = $('appt-duration');
+    if (apptDur) apptDur.addEventListener('click', e => {
+      const b = e.target.closest('[data-dur]');
+      if (!b) return;
+      const start = $('appt-start').value;
+      if (!start) { toast('Defina o horário de início primeiro', 'error'); return; }
+      const [h, m] = start.split(':').map(Number);
+      const end = new Date(2000, 0, 1, h, m + Number(b.dataset.dur));
+      $('appt-end').value = pad2(end.getHours()) + ':' + pad2(end.getMinutes());
+      apptDur.querySelectorAll('.appt-dur-btn').forEach(x => x.classList.toggle('active', x === b));
+    });
     $('agenda-grid').addEventListener('click', e => {
       const chip = e.target.closest('[data-appt]');
       if (chip) { openAppointmentModal(chip.dataset.appt); return; }
@@ -4141,10 +4995,25 @@
 
     // Automações
     $('btn-save-reminders').addEventListener('click', saveReminders);
-    $('btn-add-schedmsg').addEventListener('click', openSchedMsgModal);
-    $('btn-new-automation').addEventListener('click', () => {
-      showAutoPanel('new');
-      renderAutoList();
+    $('btn-add-schedmsg').addEventListener('click', () => openSchedMsgModal());
+    $('btn-new-automation').addEventListener('click', () => openAutomationBuilder('new'));
+    $$('#auto2-tabs .auto2-tab').forEach(b =>
+      b.addEventListener('click', () => showAuto2Tab(b.dataset.atab)));
+    $('auto-table-body').addEventListener('click', e => {
+      const ed = e.target.closest('[data-auto-edit]');
+      if (ed) { openAutomationBuilder(ed.dataset.autoEdit); return; }
+      const dp = e.target.closest('[data-auto-dup]');
+      if (dp) { duplicateAutomation(dp.dataset.autoDup); return; }
+      const dl = e.target.closest('[data-auto-del]');
+      if (dl) { deleteAutomation(dl.dataset.autoDel); return; }
+      const tg = e.target.closest('[data-auto-toggle]');
+      if (tg) { toggleAutomation(tg.dataset.autoToggle); return; }
+    });
+    $('auto-builder-close').addEventListener('click', () => {
+      $('auto-builder-backdrop').classList.remove('show');
+    });
+    $('auto-builder-backdrop').addEventListener('click', e => {
+      if (e.target === $('auto-builder-backdrop')) $('auto-builder-backdrop').classList.remove('show');
     });
 
     // Propostas
@@ -4177,6 +5046,17 @@
       if (e.target === $('schedmsg-modal-backdrop')) closeAllModals();
     });
     $('schedmsg-save').addEventListener('click', saveSchedMsg);
+    // Mídia na mensagem agendada
+    const smSet = m => { state.schedMedia = m; renderSchedMediaPreview(); };
+    $('sm-media-audio').addEventListener('click', () => {
+      toggleAudioRecording(smSet, rec => $('sm-media-audio').classList.toggle('recording', rec));
+    });
+    $('sm-media-image').addEventListener('click', () => pickMediaFile('image/*', 'image', smSet));
+    $('sm-media-file').addEventListener('click', () => pickMediaFile('*/*', 'file', smSet));
+    $('sm-media-link').addEventListener('click', () => {
+      const u = prompt('Cole o link a enviar:');
+      if (u && u.trim()) smSet({ type: 'link', url: u.trim(), name: u.trim() });
+    });
     $('schedmsg-list').addEventListener('click', e => {
       const del = e.target.closest('[data-schedmsg-del]');
       if (del) deleteSchedMsg(del.dataset.schedmsgDel);

@@ -210,5 +210,35 @@ Deno.serve(async (req) => {
     }
   }
 
+  // IMPORT-EVENTS — puxa eventos do Google Calendar (sincronização bidirecional)
+  if (action === 'import-events') {
+    const accessToken = await getFreshToken(user.id, creds)
+    if (!accessToken) return json({ ok: true, connected: false, events: [] })
+    const timeMin = body.time_min || new Date(Date.now() - 7 * 86400000).toISOString()
+    const timeMax = body.time_max || new Date(Date.now() + 90 * 86400000).toISOString()
+    const url = 'https://www.googleapis.com/calendar/v3/calendars/primary/events?' +
+      new URLSearchParams({
+        timeMin, timeMax, singleEvents: 'true', orderBy: 'startTime', maxResults: '150',
+      }).toString()
+    try {
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
+      const j = await res.json()
+      if (!res.ok) return json({ error: 'Google Calendar: ' + (j.error?.message || 'erro') }, 400)
+      const events = (j.items || [])
+        .filter((e: any) => e.status !== 'cancelled' && e.start && (e.start.dateTime || e.start.date))
+        .map((e: any) => ({
+          google_event_id: e.id,
+          title: e.summary || '(sem título)',
+          starts_at: e.start.dateTime || e.start.date,
+          ends_at: e.end?.dateTime || e.end?.date || e.start.dateTime || e.start.date,
+          location: e.location || null,
+          notes: e.description || null,
+        }))
+      return json({ ok: true, connected: true, events })
+    } catch (e) {
+      return json({ error: String(e) }, 500)
+    }
+  }
+
   return json({ error: 'Ação desconhecida' }, 400)
 })

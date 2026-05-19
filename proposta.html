@@ -153,6 +153,43 @@
   .ac-btn svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2.4;
     stroke-linecap:round;stroke-linejoin:round}
   .ac-msg{font-size:13px;color:#E6A5A5;margin-top:13px}
+  /* cronograma — timeline */
+  .timeline{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin-top:26px;
+    max-width:1000px;width:100%}
+  .tl-phase{text-align:left;padding:0 20px;border-left:1px solid var(--line2);position:relative}
+  .tl-phase:first-child{border-left:none;padding-left:0}
+  .tl-dot{width:11px;height:11px;border-radius:50%;background:var(--gold);
+    margin-bottom:14px;box-shadow:0 0 12px var(--gold)}
+  .tl-w{font-family:var(--fd);font-size:12px;letter-spacing:.13em;color:var(--gold);
+    text-transform:uppercase;margin-bottom:8px}
+  .tl-phase h3{font-family:var(--fd);font-weight:600;font-size:18px;margin-bottom:7px}
+  .tl-phase p{font-size:12.5px;color:var(--soft);line-height:1.6}
+  /* provas — depoimentos */
+  .quotes{display:grid;grid-template-columns:repeat(auto-fit,minmax(255px,1fr));gap:16px;
+    margin-top:22px;max-width:940px;width:100%}
+  .quote{background:linear-gradient(180deg,rgba(255,255,255,.045),transparent);
+    border:1px solid var(--line);border-radius:18px;padding:24px 22px;text-align:left}
+  .quote .qm{font-family:var(--fd);font-size:42px;color:var(--gold);line-height:.4;
+    display:block;height:20px}
+  .quote p{font-size:13.5px;color:var(--soft);line-height:1.66;margin:8px 0 14px}
+  .quote .qa{font-size:12px;color:var(--muted);font-weight:600}
+  /* resumo executivo */
+  .summary-grid{display:grid;grid-template-columns:1.3fr 1fr;gap:16px;margin-top:22px;
+    max-width:920px;width:100%;text-align:left}
+  .summary-main,.summary-side{border:1px solid var(--line);border-radius:18px;padding:26px 24px;
+    background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.01))}
+  .summary-main h3,.summary-side h3{font-family:var(--fd);font-weight:600;font-size:16px;
+    margin-bottom:12px;color:var(--gold)}
+  .summary-main p{font-size:14px;color:var(--soft);line-height:1.7}
+  .summary-side ul{list-style:none}
+  .summary-side li{font-size:13px;color:var(--soft);padding:9px 0;
+    border-bottom:1px solid var(--line);display:flex;gap:9px;align-items:flex-start}
+  .summary-side li:last-child{border-bottom:none}
+  .summary-side li .ico{width:15px;height:15px;color:var(--teal);flex-shrink:0;margin-top:2px}
+  .pp-foot{position:fixed;bottom:26px;left:32px;font-size:10.5px;color:var(--muted);
+    letter-spacing:.08em;z-index:20}
+  @media(max-width:760px){.timeline{grid-template-columns:1fr 1fr}
+    .tl-phase{border-left:none;padding:0 0 16px}.summary-grid{grid-template-columns:1fr}}
   @media(max-width:640px){
     .slide{padding:13vh 7vw}.nav{width:42px;height:42px}.nav.prev{left:7px}.nav.next{right:7px}
     .ac-grid{grid-template-columns:1fr}.brandtag{left:16px}.card{padding:24px 20px}
@@ -210,6 +247,10 @@
     return '<div class="card"><span class="ico chip"><svg><use href="#ic-'+icon+'"/></svg></span>'+
       (n?'<div class="n">'+n+'</div>':'')+'<h3>'+t+'</h3><p>'+d+'</p></div>';}
   function stat(v,l){return '<div class="stat"><div class="v">'+v+'</div><div class="l">'+l+'</div></div>';}
+  function tlphase(w,t,d){return '<div class="tl-phase"><div class="tl-dot"></div>'+
+    '<div class="tl-w">'+w+'</div><h3>'+t+'</h3><p>'+d+'</p></div>';}
+  function quote(txt,who){return '<div class="quote"><span class="qm">&ldquo;</span>'+
+    '<p>'+txt+'</p><div class="qa">'+who+'</div></div>';}
 
   function build(p){
     var nicho=p.client_niche||'o seu mercado';
@@ -236,6 +277,21 @@
         R('<div class="rule"></div>')+
         R('<div class="who">Apresentado por '+esc(p.vendedor)+'  ·  '+
           new Date(p.created_at).toLocaleDateString('pt-BR')+'</div>')),
+
+      slide('',
+        R(kick('compass','Resumo executivo'))+
+        R('<h2>A proposta em <span class="em">um olhar</span></h2>')+
+        R('<div class="summary-grid">'+
+          '<div class="summary-main"><h3>O essencial</h3><p>Esta proposta apresenta um plano completo de aquisição de clientes para '+
+            esc(p.client_name||'a sua empresa')+(p.client_niche?', no segmento de '+esc(p.client_niche):'')+
+            '. O objetivo é transformar a captação em um processo previsível e mensurável — da atração do lead certo ao fechamento — com acompanhamento próximo e decisões guiadas por dados.</p></div>'+
+          '<div class="summary-side"><h3>Inclui</h3><ul>'+
+            '<li>'+ic('check')+'<span>Diagnóstico e estratégia sob medida</span></li>'+
+            '<li>'+ic('check')+'<span>Funil de vendas e automações</span></li>'+
+            '<li>'+ic('check')+'<span>Execução de tráfego e conteúdo</span></li>'+
+            '<li>'+ic('check')+'<span>Relatórios e otimização contínua</span></li>'+
+          '</ul></div>'+
+        '</div>')),
 
       slide('',
         R(kick('search','O seu momento'))+
@@ -276,6 +332,17 @@
         '</div>')),
 
       slide('',
+        R(kick('flag','Cronograma'))+
+        R('<h2>O caminho da <span class="em">implementação</span></h2>')+
+        R('<div class="lead">Da assinatura ao crescimento sustentado — um percurso claro, sem surpresas.</div>')+
+        R('<div class="timeline">'+
+          tlphase('Semana 1','Imersão','Diagnóstico completo, acessos, metas e alinhamento da estratégia com você.')+
+          tlphase('Semanas 2–3','Construção','Funil, criativos, automações e CRM montados e configurados.')+
+          tlphase('Semana 4','Lançamento','Campanhas no ar, primeiros leads chegando e ajustes finos.')+
+          tlphase('Mês 2+','Crescimento','Otimização contínua guiada por dados e relatórios mensais.')+
+        '</div>')),
+
+      slide('',
         R(kick('layers','Escopo do projeto'))+
         R('<h2>O que vamos <span class="em">entregar</span></h2>')+
         R('<div class="lead">Tudo o que está incluído nesta proposta — cada item pensado para sustentar o seu crescimento.</div>')+
@@ -289,6 +356,16 @@
           card('target','','Foco em ROI','Cada real investido é medido. O nosso objetivo é retorno — não curtida, não vaidade.')+
           card('users','','Time por perto','Acompanhamento de verdade, com reuniões e relatórios claros. Você nunca fica sozinho no processo.')+
           card('puzzle','','Tudo integrado','Tráfego, conteúdo, CRM e automações trabalham juntos, dentro de uma única estratégia coerente.')+
+        '</div>')),
+
+      slide('',
+        R(kick('users','Provas & autoridade'))+
+        R('<h2>Quem confia na <span class="em">MyLion</span></h2>')+
+        R('<div class="lead">Método aplicado, resultado real. O que dizem os negócios que já trilharam esse caminho conosco.</div>')+
+        R('<div class="quotes">'+
+          quote('Saímos da indicação esporádica para uma agenda cheia e previsível. Hoje sei de onde vem cada cliente.','Clínica de estética · parceira MyLion')+
+          quote('O CRM e as automações mudaram o jogo: nenhum lead esfria sem a gente perceber.','Negócio de saúde · parceira MyLion')+
+          quote('Profissionalismo e transparência. Relatórios claros e acompanhamento de verdade, todo mês.','Gestora de clínica · parceira MyLion')+
         '</div>')),
 
       slide('',
@@ -347,7 +424,8 @@
       '<div class="deck">'+slides.join('')+'</div>'+
       '<button class="nav prev" id="nav-prev"><svg><use href="#ic-arrow-l"/></svg></button>'+
       '<button class="nav next" id="nav-next"><svg><use href="#ic-arrow-r"/></svg></button>'+
-      '<div class="dots">'+dots+'</div><div class="count" id="count"></div>';
+      '<div class="dots">'+dots+'</div><div class="count" id="count"></div>'+
+      '<div class="pp-foot">MyLion · Proposta Comercial · Documento confidencial</div>';
     document.getElementById('nav-prev').onclick=function(){go(idx-1);};
     document.getElementById('nav-next').onclick=function(){go(idx+1);};
     document.querySelectorAll('.dot').forEach(function(d){d.onclick=function(){go(+d.dataset.i);};});
